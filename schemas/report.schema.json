@@ -1,0 +1,527 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-security/schemas/v1/report.schema.json",
+  "title": "Plugin review report v1",
+  "description": "One review of one plugin at one commit. Immutable once published (api/v1/plugins/<id>/<sha>.json). See docs/REPORT-DIMENSIONS.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "plugin", "review", "verdict", "whatItDoes", "capabilities", "systemAreas", "network", "dependencies", "secrets", "supplyChain", "injection", "codeQuality", "performance", "maintenance", "diffSinceLastReview", "findings", "ai"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "repo", "marketplace"],
+      "properties": {
+        "id": { "$ref": "#/$defs/pluginId" },
+        "name": { "type": "string", "maxLength": 200 },
+        "repo": { "$ref": "#/$defs/repoUrl" },
+        "marketplace": {
+          "type": ["object", "null"],
+          "description": "null = not listed on plugins.omarchy.org.",
+          "additionalProperties": false,
+          "required": ["verificationCommit", "baselineOutcome", "caps", "stars"],
+          "properties": {
+            "verificationCommit": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] },
+            "baselineOutcome": { "type": ["string", "null"], "maxLength": 64 },
+            "caps": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+            "stars": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        }
+      }
+    },
+
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "reviewedAt", "scannerVersion", "rulesVersion", "tools", "aiModel", "upstreamHeadAtScan", "previousCommit"],
+      "properties": {
+        "commit": { "$ref": "#/$defs/sha" },
+        "reviewedAt": { "$ref": "#/$defs/dateTime" },
+        "scannerVersion": { "type": "string", "maxLength": 64 },
+        "rulesVersion": { "type": "string", "maxLength": 64 },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version", "status"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 64 },
+              "version": { "type": ["string", "null"], "maxLength": 64 },
+              "status": { "enum": ["ok", "failed", "skipped"] }
+            }
+          }
+        },
+        "aiModel": { "type": ["string", "null"], "maxLength": 64, "description": "null = run with --no-ai." },
+        "upstreamHeadAtScan": { "$ref": "#/$defs/sha" },
+        "previousCommit": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] }
+      }
+    },
+
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "score", "hardFails", "aiEscalation", "summary"],
+      "properties": {
+        "outcome": { "$ref": "#/$defs/outcome" },
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "hardFails": { "$ref": "#/$defs/evidence" },
+        "aiEscalation": {
+          "type": ["object", "null"],
+          "description": "null = AI did not change the outcome (or did not run).",
+          "additionalProperties": false,
+          "required": ["from", "to", "reason"],
+          "properties": {
+            "from": { "$ref": "#/$defs/outcome" },
+            "to": { "$ref": "#/$defs/outcome" },
+            "reason": { "type": "string", "maxLength": 300 }
+          }
+        },
+        "summary": { "type": "string", "maxLength": 200 }
+      }
+    },
+
+    "whatItDoes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["oneLiner", "kinds", "entryPoints", "manifestValid", "manifestError"],
+      "properties": {
+        "oneLiner": { "type": "string", "maxLength": 160 },
+        "kinds": { "type": "array", "items": { "type": "string", "maxLength": 32 } },
+        "entryPoints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "path"],
+            "properties": {
+              "key": { "type": "string", "maxLength": 64 },
+              "path": { "type": "string", "maxLength": 512 }
+            }
+          }
+        },
+        "manifestValid": { "type": "boolean" },
+        "manifestError": { "type": ["string", "null"], "maxLength": 300 }
+      }
+    },
+
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["processExec", "network", "fileWrite", "persistence", "privilege", "packageInstall", "bundledBinary", "clipboard", "screenCapture", "hyprlandIpc"],
+      "properties": {
+        "processExec": { "$ref": "#/$defs/capability" },
+        "network": { "$ref": "#/$defs/capability" },
+        "fileWrite": { "$ref": "#/$defs/capability", "description": "Writes outside the plugin's own directory / state dir." },
+        "persistence": { "$ref": "#/$defs/capability" },
+        "privilege": { "$ref": "#/$defs/capability" },
+        "packageInstall": { "$ref": "#/$defs/capability" },
+        "bundledBinary": { "$ref": "#/$defs/capability" },
+        "clipboard": { "$ref": "#/$defs/capability" },
+        "screenCapture": { "$ref": "#/$defs/capability" },
+        "hyprlandIpc": { "$ref": "#/$defs/capability" }
+      }
+    },
+
+    "systemAreas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["touched", "evidence"],
+      "properties": {
+        "touched": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/systemArea" } },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["area", "findings"],
+            "properties": {
+              "area": { "$ref": "#/$defs/systemArea" },
+              "findings": { "$ref": "#/$defs/evidence" }
+            }
+          }
+        }
+      }
+    },
+
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hosts"],
+      "properties": {
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["host", "schemes", "evidence"],
+            "properties": {
+              "host": { "type": "string", "maxLength": 253 },
+              "schemes": { "type": "array", "uniqueItems": true, "items": { "enum": ["http", "https", "ws", "wss", "git", "ssh", "other"] } },
+              "evidence": { "$ref": "#/$defs/evidence" }
+            }
+          }
+        }
+      }
+    },
+
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packages", "systemPackages", "vulnerabilities"],
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version", "ecosystem", "direct", "pinned", "manifestPath"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 214 },
+              "version": { "type": ["string", "null"], "maxLength": 128 },
+              "ecosystem": { "enum": ["npm", "pypi", "cargo", "go", "git", "other"] },
+              "direct": { "type": "boolean" },
+              "pinned": { "type": "boolean" },
+              "manifestPath": { "type": "string", "maxLength": 512 }
+            }
+          }
+        },
+        "systemPackages": {
+          "type": "array",
+          "description": "pacman/AUR packages the plugin tells users to install or installs itself.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "source", "evidence"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 128 },
+              "source": { "enum": ["pacman", "aur", "unknown"] },
+              "evidence": { "$ref": "#/$defs/evidence" }
+            }
+          }
+        },
+        "vulnerabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "package", "severity", "fixedIn"],
+            "properties": {
+              "id": { "type": "string", "maxLength": 64 },
+              "package": { "type": "string", "maxLength": 214 },
+              "severity": { "$ref": "findings.schema.json#/$defs/severity" },
+              "fixedIn": { "type": ["string", "null"], "maxLength": 128 }
+            }
+          }
+        }
+      }
+    },
+
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "items"],
+      "description": "Never contains secret values; see finding snippet (redacted).",
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["findingId", "kind", "live"],
+            "properties": {
+              "findingId": { "$ref": "findings.schema.json#/$defs/findingId" },
+              "kind": { "type": "string", "maxLength": 64 },
+              "live": { "type": ["boolean", "null"], "description": "null = not verifiable." }
+            }
+          }
+        }
+      }
+    },
+
+    "supplyChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scorecard", "pinnedDeps", "signedCommitRatio", "busFactor", "repoAgeDays", "unpinnedRemoteFetches"],
+      "properties": {
+        "scorecard": {
+          "type": ["object", "null"],
+          "description": "OpenSSF Scorecard; null = unavailable.",
+          "additionalProperties": false,
+          "required": ["score", "date", "checks"],
+          "properties": {
+            "score": { "type": "number", "minimum": 0, "maximum": 10 },
+            "date": { "type": "string", "format": "date" },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "score"],
+                "properties": {
+                  "name": { "type": "string", "maxLength": 64 },
+                  "score": { "type": "integer", "minimum": -1, "maximum": 10 }
+                }
+              }
+            }
+          }
+        },
+        "pinnedDeps": { "type": ["boolean", "null"], "description": "null = no dependencies." },
+        "signedCommitRatio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "busFactor": { "type": ["integer", "null"], "minimum": 0 },
+        "repoAgeDays": { "type": ["integer", "null"], "minimum": 0 },
+        "unpinnedRemoteFetches": { "$ref": "#/$defs/evidence" }
+      }
+    },
+
+    "injection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hiddenUnicode", "promptInjection", "obfuscation"],
+      "properties": {
+        "hiddenUnicode": { "$ref": "#/$defs/countedEvidence" },
+        "promptInjection": { "$ref": "#/$defs/countedEvidence" },
+        "obfuscation": { "$ref": "#/$defs/countedEvidence" }
+      }
+    },
+
+    "codeQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loc", "lint", "tests", "docs", "license", "hotspots"],
+      "properties": {
+        "loc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "byLanguage"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "byLanguage": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["language", "files", "lines"],
+                "properties": {
+                  "language": { "type": "string", "maxLength": 32 },
+                  "files": { "type": "integer", "minimum": 0 },
+                  "lines": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        },
+        "lint": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tool", "errors", "warnings"],
+            "properties": {
+              "tool": { "type": "string", "maxLength": 32 },
+              "errors": { "type": "integer", "minimum": 0 },
+              "warnings": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["present", "files"],
+          "properties": {
+            "present": { "type": "boolean" },
+            "files": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "docs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["readme", "changelog"],
+          "properties": {
+            "readme": { "type": "boolean" },
+            "changelog": { "type": "boolean" }
+          }
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spdx", "file"],
+          "properties": {
+            "spdx": { "type": ["string", "null"], "maxLength": 64 },
+            "file": { "type": "boolean" }
+          }
+        },
+        "hotspots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "reason"],
+            "properties": {
+              "path": { "type": "string", "maxLength": 512 },
+              "reason": { "type": "string", "maxLength": 200 }
+            }
+          }
+        }
+      }
+    },
+
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timers", "estSpawnsPerMin", "keepLoaded", "largeAssets", "polling"],
+      "properties": {
+        "timers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "line", "intervalMs", "repeat", "spawnsProcess"],
+            "properties": {
+              "path": { "type": "string", "maxLength": 512 },
+              "line": { "type": "integer", "minimum": 0 },
+              "intervalMs": { "type": ["integer", "null"], "minimum": 0, "description": "null = computed at runtime." },
+              "repeat": { "type": "boolean" },
+              "spawnsProcess": { "type": "boolean" }
+            }
+          }
+        },
+        "estSpawnsPerMin": { "type": ["number", "null"], "minimum": 0 },
+        "keepLoaded": { "type": ["boolean", "null"] },
+        "largeAssets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "bytes"],
+            "properties": {
+              "path": { "type": "string", "maxLength": 512 },
+              "bytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "polling": { "$ref": "#/$defs/evidence" }
+      }
+    },
+
+    "maintenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lastCommitAt", "commits90d", "contributors", "openIssues", "archived", "latestRelease"],
+      "description": "From GitHub API; nulls = unavailable.",
+      "properties": {
+        "lastCommitAt": { "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }] },
+        "commits90d": { "type": ["integer", "null"], "minimum": 0 },
+        "contributors": { "type": ["integer", "null"], "minimum": 0 },
+        "openIssues": { "type": ["integer", "null"], "minimum": 0 },
+        "archived": { "type": ["boolean", "null"] },
+        "latestRelease": { "type": ["string", "null"], "maxLength": 128 }
+      }
+    },
+
+    "diffSinceLastReview": {
+      "type": ["object", "null"],
+      "description": "null = first review.",
+      "additionalProperties": false,
+      "required": ["fromCommit", "toCommit", "filesChanged", "insertions", "deletions", "newFindings", "resolvedRuleIds", "capabilityChanges", "outcomeChange"],
+      "properties": {
+        "fromCommit": { "$ref": "#/$defs/sha" },
+        "toCommit": { "$ref": "#/$defs/sha" },
+        "filesChanged": { "type": "integer", "minimum": 0 },
+        "insertions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 },
+        "newFindings": { "$ref": "#/$defs/evidence" },
+        "resolvedRuleIds": { "type": "array", "items": { "$ref": "findings.schema.json#/$defs/ruleId" } },
+        "capabilityChanges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["capability", "from", "to"],
+            "properties": {
+              "capability": { "enum": ["processExec", "network", "fileWrite", "persistence", "privilege", "packageInstall", "bundledBinary", "clipboard", "screenCapture", "hyprlandIpc"] },
+              "from": { "$ref": "#/$defs/level" },
+              "to": { "$ref": "#/$defs/level" }
+            }
+          }
+        },
+        "outcomeChange": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "$ref": "#/$defs/outcome" },
+            "to": { "$ref": "#/$defs/outcome" }
+          }
+        }
+      }
+    },
+
+    "findings": { "type": "array", "items": { "$ref": "findings.schema.json" } },
+
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass1", "pass2", "guard"],
+      "properties": {
+        "pass1": {
+          "type": ["object", "null"],
+          "description": "null = --no-ai.",
+          "additionalProperties": false,
+          "required": ["status", "output", "turns", "costUsd"],
+          "properties": {
+            "status": { "enum": ["ok", "failed", "aborted"] },
+            "output": { "oneOf": [{ "$ref": "ai-review.schema.json" }, { "type": "null" }] },
+            "turns": { "type": ["integer", "null"], "minimum": 0 },
+            "costUsd": { "type": ["number", "null"], "minimum": 0 }
+          }
+        },
+        "pass2": { "type": "array", "items": { "$ref": "ai-verify.schema.json#/$defs/item" } },
+        "guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canaryOk", "positiveControlOk", "disallowedToolUse", "schemaValid"],
+          "description": "null = check not run.",
+          "properties": {
+            "canaryOk": { "type": ["boolean", "null"] },
+            "positiveControlOk": { "type": ["boolean", "null"] },
+            "disallowedToolUse": { "type": ["boolean", "null"] },
+            "schemaValid": { "type": ["boolean", "null"] }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "dateTime": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$" },
+    "pluginId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128 },
+    "repoUrl": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "outcome": { "enum": ["safe", "caution", "risky", "blocked"] },
+    "level": { "enum": ["none", "low", "med", "high"] },
+    "evidence": { "type": "array", "uniqueItems": true, "items": { "$ref": "findings.schema.json#/$defs/findingId" } },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "evidence"],
+      "properties": {
+        "level": { "$ref": "#/$defs/level" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "countedEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "evidence"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "systemArea": { "enum": ["omarchy-shell", "hyprland", "systemd", "pacman-aur", "sudoers", "shell-rc", "ssh", "browsers", "gpg", "dbus"] }
+  }
+}
