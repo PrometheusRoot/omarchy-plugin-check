@@ -1,0 +1,44 @@
+# ADR-0015. Formatters (ruff, shfmt, qmlformat, biome) read or mirror these settings.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+max_line_length = 110
+
+[*.py]
+indent_size = 4
+
+[*.sh]
+indent_size = 2
+# shfmt flags: -i 2 -ci -bn -sr
+binary_next_line = true
+switch_case_indent = true
+space_redirects = true
+
+[{justfile,Makefile}]
+indent_style = tab
+indent_size = 4
+
+[justfile]
+indent_style = space
+
+# Byte-exact test inputs (hidden unicode, recorded streams): never touch.
+[scanner/fixtures/**]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset
+
+[scanner/tests/data/**]
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+
+[*.md]
+trim_trailing_whitespace = false

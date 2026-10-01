@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Run a pinned dev tool from .venv/bin or .tools/bin (git hooks run without an activated venv).
+set -Eeuo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PATH="$root/.venv/bin:$root/.tools/bin:$PATH"
+exec "$@"

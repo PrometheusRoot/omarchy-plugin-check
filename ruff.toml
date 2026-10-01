@@ -1,0 +1,5 @@
+# Repo-level scripts/ (scanner/ has its own config in scanner/pyproject.toml).
+extend = "standards/ruff.toml"
+
+[lint.per-file-ignores]
+"scripts/*.py" = ["T201"]  # why: CLI scripts print their result

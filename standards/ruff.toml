@@ -1,0 +1,23 @@
+# Shared ruff config (ADR-0015). Explicit select: ruff >= 0.16 changed its defaults, never rely on them.
+target-version = "py312"
+line-length = 110
+
+[lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "A", "C4", "C90", "SIM", "RET", "RUF", "PL", "PT", "S", "T20", "TC",
+  "ERA", "ANN", "D", "TID", "ISC", "PIE", "FBT", "PERF", "FURB", "LOG", "G"]
+# why: S603/S607 — running subprocesses is the product; D100/D104 — module/package docstrings optional;
+# D203/D213 conflict with D211/D212; ANN401 — Any is allowed at JSON boundaries; PLR2004 — magic values are named in core.
+ignore = ["D100", "D104", "D203", "D213", "ANN401", "PLR2004", "S603", "S607"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"  # why: `from .. import` hides layering; use absolute `opsec.x`
+
+[lint.pydocstyle]
+convention = "google"
+
+# per-file-ignores are anchored to the config that defines them, so each consumer
+# (scanner/pyproject.toml, ...) repeats the standard set:
+#   "tests/**" = ["S101", "D", "ANN", "PLR", "FBT"]   "**/stages/*.py" = ["D102"]
