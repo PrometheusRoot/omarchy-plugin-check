@@ -82,7 +82,7 @@
     "verdict": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["outcome", "score", "hardFails", "aiEscalation", "summary"],
+      "required": ["outcome", "score", "hardFails", "aiEscalation", "summary", "reasons", "criteria"],
       "properties": {
         "outcome": { "$ref": "#/$defs/outcome" },
         "score": { "type": "integer", "minimum": 0, "maximum": 100 },
@@ -98,7 +98,25 @@
             "reason": { "type": "string", "maxLength": 300 }
           }
         },
-        "summary": { "type": "string", "maxLength": 200 }
+        "summary": { "type": "string", "maxLength": 200 },
+        "reasons": {
+          "type": "array",
+          "description": "Every condition that shaped the outcome, most severe first (VERDICT-LOGIC.md).",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "type": "string", "maxLength": 300 }
+        },
+        "criteria": {
+          "type": "object",
+          "description": "Provider-protocol criteria. notChecked = this review cannot vouch for it (e.g. safe-to-run with external code, ADR-0019).",
+          "additionalProperties": false,
+          "required": ["checked", "failed", "notChecked"],
+          "properties": {
+            "checked": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/criterion" } },
+            "failed": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/criterion" } },
+            "notChecked": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/criterion" } }
+          }
+        }
       }
     },
 
@@ -129,7 +147,7 @@
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["processExec", "network", "fileWrite", "persistence", "privilege", "packageInstall", "bundledBinary", "clipboard", "screenCapture", "hyprlandIpc"],
+      "required": ["processExec", "network", "fileWrite", "persistence", "privilege", "packageInstall", "bundledBinary", "clipboard", "screenCapture", "hyprlandIpc", "externalCode"],
       "properties": {
         "processExec": { "$ref": "#/$defs/capability" },
         "network": { "$ref": "#/$defs/capability" },
@@ -140,7 +158,8 @@
         "bundledBinary": { "$ref": "#/$defs/capability" },
         "clipboard": { "$ref": "#/$defs/capability" },
         "screenCapture": { "$ref": "#/$defs/capability" },
-        "hyprlandIpc": { "$ref": "#/$defs/capability" }
+        "hyprlandIpc": { "$ref": "#/$defs/capability" },
+        "externalCode": { "$ref": "#/$defs/externalCodeCapability", "description": "Runs or installs code that is not in the reviewed commit (ADR-0019)." }
       }
     },
 
@@ -461,7 +480,7 @@
             "additionalProperties": false,
             "required": ["capability", "from", "to"],
             "properties": {
-              "capability": { "enum": ["processExec", "network", "fileWrite", "persistence", "privilege", "packageInstall", "bundledBinary", "clipboard", "screenCapture", "hyprlandIpc"] },
+              "capability": { "enum": ["processExec", "network", "fileWrite", "persistence", "privilege", "packageInstall", "bundledBinary", "clipboard", "screenCapture", "hyprlandIpc", "externalCode"] },
               "from": { "$ref": "#/$defs/level" },
               "to": { "$ref": "#/$defs/level" }
             }
@@ -532,6 +551,32 @@
         "evidence": { "$ref": "#/$defs/evidence" }
       }
     },
+    "externalCodeCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "evidence", "externals"],
+      "properties": {
+        "level": { "$ref": "#/$defs/level" },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "externals": {
+          "type": "array",
+          "maxItems": 200,
+          "description": "Binaries / packages the plugin depends on but does not ship; listed even when only documented (level stays none then).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "kind", "source", "evidence"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 214 },
+              "kind": { "enum": ["binary", "system-package", "package"] },
+              "source": { "enum": ["aur", "pacman", "npm", "pypi", "cargo", "go", "unknown"] },
+              "evidence": { "$ref": "#/$defs/evidence" }
+            }
+          }
+        }
+      }
+    },
+    "criterion": { "enum": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-privilege", "no-obfuscation", "no-secrets", "reviewed-by-human"] },
     "countedEvidence": {
       "type": "object",
       "additionalProperties": false,

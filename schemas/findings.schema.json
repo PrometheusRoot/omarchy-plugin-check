@@ -25,6 +25,6 @@
     "findingId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$" },
     "ruleId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]{0,127}$" },
     "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
-    "category": { "enum": ["exec", "network", "persistence", "privilege", "obfuscation", "injection", "secret", "filesystem", "package", "supply-chain", "quality", "performance", "other"] }
+    "category": { "enum": ["exec", "network", "persistence", "privilege", "obfuscation", "injection", "secret", "filesystem", "package", "supply-chain", "quality", "performance", "external-code", "other"] }
   }
 }
