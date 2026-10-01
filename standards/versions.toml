@@ -1,0 +1,34 @@
+# Every developer-tool pin in one place (ADR-0015, ADR-0016). Renovate moves these.
+# scripts/check_docs.py fails if scanner/pyproject.toml [dependency-groups].dev or
+# standards/dev-tools.lock drift from this file, and renders the table in docs/ENGINEERING.md.
+# Scanner tools (what we run *on plugins*) are pinned separately: scanner/containers/tools.lock,
+# requirements-tools.txt, package-tools-lock.json.
+# status: active = enforced now; planned = lands with its stack (P4/P5, CI PR).
+
+[python]
+uv = { version = "0.12.21", job = "venv / lock / sync (optional; pip + .venv works)", status = "active" }
+ruff = { version = "0.16.9", job = "format + lint + import sort", status = "active" }
+basedpyright = { version = "1.40.1", job = "type check (strict, baseline for legacy)", status = "active" }
+pytest = { version = "9.1.1", job = "tests", status = "active" }
+pytest-cov = { version = "7.1.0", job = "branch coverage + floors", status = "active" }
+hypothesis = { version = "6.168.3", job = "property tests (verdict invariants)", status = "active" }
+import-linter = { version = "2.15", job = "architecture contracts", status = "active" }
+deptry = { version = "0.25.1", job = "dependency hygiene", status = "active" }
+check-jsonschema = { version = "0.38.2", job = "schema metaschema + workflow schema", status = "active" }
+mutmut = { version = "3.8.0", job = "mutation testing of the core (nightly)", status = "active" }
+
+[binaries]
+just = { version = "1.58.0", job = "command runner", status = "active" }
+prek = { version = "0.5.4", job = "git hooks (pre-commit compatible)", status = "active" }
+shfmt = { version = "3.14.1", job = "shell format", status = "active" }
+actionlint = { version = "1.7.12", job = "workflow lint", status = "active" }
+shellcheck = { version = "0.11.0", job = "shell lint (also a scanner; pinned in tools.lock)", status = "active" }
+zizmor = { version = "1.30.1", job = "workflow security audit (also a scanner)", status = "planned" }
+hadolint = { version = "2.14", job = "Dockerfile lint", status = "planned" }
+
+[web]
+node = { version = "24", job = "QML/JS logic tests (node --test), site", status = "planned" }
+biome = { version = "2.4", job = "format + lint (TS/Astro)", status = "planned" }
+vitest = { version = "4", job = "unit tests (aggregator, site)", status = "planned" }
+playwright = { version = "1.5x", job = "4 e2e specs", status = "planned" }
+lhci = { version = "0.15", job = "Lighthouse CI budgets", status = "planned" }
