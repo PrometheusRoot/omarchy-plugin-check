@@ -12,21 +12,35 @@
     "plugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "repo", "marketplace"],
+      "required": ["id", "name", "repo", "listingState", "marketplace"],
       "properties": {
-        "id": { "$ref": "#/$defs/pluginId" },
+        "id": { "$ref": "#/$defs/pluginId", "description": "Marketplace catalog id (never invented). Unlisted: manifest id, else derived from the repo." },
         "name": { "type": "string", "maxLength": 200 },
         "repo": { "$ref": "#/$defs/repoUrl" },
+        "listingState": { "enum": ["listed", "unlisted", "retired"], "description": "listed = in catalog.json; retired = id in registry.json retiredPluginIds; unlisted = not a marketplace plugin." },
         "marketplace": {
           "type": ["object", "null"],
-          "description": "null = not listed on plugins.omarchy.org.",
+          "description": "null = not listed on plugins.omarchy.org. Every value is copied verbatim from the marketplace catalog (source of truth).",
           "additionalProperties": false,
-          "required": ["verificationCommit", "baselineOutcome", "caps", "stars"],
+          "required": ["verificationCommit", "listingValidatedCommit", "upstreamObservedCommit", "baselineOutcome", "verificationStatus", "caps", "stars", "catalogGeneratedAt", "manifestPath", "repositoryLayout", "author", "description", "category", "kind", "tags", "license", "installCommand"],
           "properties": {
             "verificationCommit": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] },
+            "listingValidatedCommit": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] },
+            "upstreamObservedCommit": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] },
             "baselineOutcome": { "type": ["string", "null"], "maxLength": 64 },
+            "verificationStatus": { "type": ["string", "null"], "maxLength": 64 },
             "caps": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
-            "stars": { "type": ["integer", "null"], "minimum": 0 }
+            "stars": { "type": ["integer", "null"], "minimum": 0 },
+            "catalogGeneratedAt": { "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }] },
+            "manifestPath": { "type": ["string", "null"], "maxLength": 512 },
+            "repositoryLayout": { "type": ["string", "null"], "maxLength": 32 },
+            "author": { "type": ["string", "null"], "maxLength": 200 },
+            "description": { "type": ["string", "null"], "maxLength": 1000 },
+            "category": { "type": ["string", "null"], "maxLength": 64 },
+            "kind": { "type": ["string", "null"], "maxLength": 64 },
+            "tags": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 64 } },
+            "license": { "type": ["string", "null"], "maxLength": 64 },
+            "installCommand": { "type": ["string", "null"], "maxLength": 300 }
           }
         }
       }
@@ -35,9 +49,14 @@
     "review": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commit", "reviewedAt", "scannerVersion", "rulesVersion", "tools", "aiModel", "upstreamHeadAtScan", "previousCommit"],
+      "required": ["commit", "scanTarget", "pluginPath", "reviewedAt", "scannerVersion", "rulesVersion", "tools", "aiModel", "upstreamHeadAtScan", "previousCommit"],
       "properties": {
         "commit": { "$ref": "#/$defs/sha" },
+        "scanTarget": {
+          "enum": ["marketplace-verified", "marketplace-listing", "upstream-observed", "upstream-head", "explicit", "local"],
+          "description": "Which commit was reviewed: catalog verificationCommit / listingValidatedCommit / upstreamObservedCommit, live upstream HEAD, an explicit --commit, or a local directory (content hash when not a git checkout)."
+        },
+        "pluginPath": { "type": "string", "maxLength": 512, "description": "Repo-relative plugin directory (catalog manifestPath dir); \"\" = repository root." },
         "reviewedAt": { "$ref": "#/$defs/dateTime" },
         "scannerVersion": { "type": "string", "maxLength": 64 },
         "rulesVersion": { "type": "string", "maxLength": 64 },
