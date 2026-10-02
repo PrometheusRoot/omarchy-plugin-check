@@ -7,8 +7,9 @@ import Quickshell.Io
 import "../lib/install.mjs" as Inst
 import "../lib/data.mjs" as Data
 
-// Install / update / remove through `omarchy-plugin-check --add --pin <repo>` (argv, never
-// a shell string; lib/install.mjs). The checker CLI may be absent: install is then
+// Install through `omarchy-plugin-check --add --pin <repo>`, update / roll back through
+// `omarchy-plugin-check pin --yes <id>` (ADR-0035), remove through omarchy (argv, never a
+// shell string; lib/install.mjs). The checker CLI may be absent: install is then
 // disabled with "checker not installed". `--dev` swaps in a fake runner that replays the
 // state machine, and a fixed installed list, so every dialog and state can be exercised.
 Singleton {
@@ -25,8 +26,10 @@ Singleton {
     property var rec: null
     readonly property string state: flow ? flow.state : "idle"
 
-    // id -> {sha, state?, reviewed?, upstream?}
+    // id -> {sha, state?, treeMatch?, moved?, repin?, reviewed?, upstream?} (Data.parseInstalled)
     property var installed: ({})
+    // The running flow re-pins an installed plugin (pin) instead of adding one.
+    property bool repin: false
     property int installedVersion: 0
     signal finished(var rec, bool ok)
     signal removed(string id)
@@ -34,10 +37,12 @@ Singleton {
     // repin: update / roll back an installed plugin to the reviewed commit.
     function begin(r, repin) {
         rec = r;
+        root.repin = !!repin;
         flow = Inst.start(r, {
             checker: checker,
             dev: dev,
-            installed: !repin && !!installed[r.id]
+            installed: !repin && !!installed[r.id],
+            repin: !!repin
         });
         if (flow.state === "running")
             run();
@@ -72,7 +77,7 @@ Singleton {
             fake.restart();
             return;
         }
-        const argv = Inst.command(rec);
+        const argv = repin ? Inst.pinCommand(rec) : Inst.command(rec);
         if (!argv) {
             flow = Inst.reduce(flow, {
                 type: "exit",
@@ -89,10 +94,13 @@ Singleton {
         if (ev.type === "exit") {
             if (flow.state === "done") {
                 const map = Object.assign({}, installed);
-                map[rec.id] = {
+                map[rec.id] = Object.assign({}, installed[rec.id] || {}, {
                     sha: rec.commit ? String(rec.commit).slice(0, 7) : "",
-                    state: "ok"
-                };
+                    state: "ok",
+                    commitMatch: true,
+                    treeMatch: true,
+                    repin: null
+                });
                 installed = map;
                 installedVersion++;
                 if (!dev)
@@ -177,16 +185,18 @@ Singleton {
         }
     }
 
-    // Installed plugins: directory name = plugin id, HEAD from git.
+    // Installed plugins: the checker's `status --json` (identity incl. former repositories,
+    // commit + tree vs the signed snapshot, repin direction; offline), else directory name =
+    // plugin id and HEAD from git.
     Process {
         id: probe
 
         running: !root.dev
-        command: ["sh", "-c", "for d in \"$HOME\"/.config/omarchy/plugins/*/; do [ -d \"$d\" ] || continue; printf '%s %s\\n' \"$(basename \"$d\")\" \"$(git -C \"$d\" rev-parse HEAD 2>/dev/null)\"; done"]
+        command: ["sh", "-c", "if command -v omarchy-plugin-check >/dev/null 2>&1; then exec omarchy-plugin-check status --json; fi; for d in \"$HOME\"/.config/omarchy/plugins/*/; do [ -d \"$d\" ] || continue; printf '%s %s\\n' \"$(basename \"$d\")\" \"$(git -C \"$d\" rev-parse HEAD 2>/dev/null)\"; done"]
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
-                root.installed = Data.parseInstalled(text);
+                root.installed = Data.parseInstalled(text, Inst.statusState);
                 root.installedVersion++;
             }
         }
@@ -201,15 +211,21 @@ Singleton {
             "omamail": {
                 sha: "b7f0a91",
                 state: "update",
+                repin: "forward",
+                treeMatch: false,
                 upstream: "c31e0d4"
             },
             "io.github.letsfg.flights": {
                 sha: "8b21e07",
-                state: "stale"
+                state: "stale",
+                repin: "back",
+                treeMatch: false
             },
             "akitaonrails.ai-usagebar": {
                 sha: "b1766cb",
-                state: "ok"
+                state: "ok",
+                treeMatch: true,
+                moved: true
             },
             "tornikegomareli.spaces": {
                 sha: "1d4e77a"

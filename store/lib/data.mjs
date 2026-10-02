@@ -375,13 +375,52 @@ export function mapReport(d, r) {
   for (var e = 0; e < d.deps.length; e++) if (d.ecosystems.indexOf(d.deps[e].eco) === -1) d.ecosystems.push(d.deps[e].eco);
 }
 
-// `id sha` per line from the installed-plugins probe (Installer.qml).
-export function parseInstalled(text) {
+// The installed-plugins probe (Installer.qml): `omarchy-plugin-check status --json` when the
+// checker is installed (keyed by the listed id; `state` from Inst.statusState), else `id sha`
+// per line from git. statusState is passed in so this module stays free of install logic.
+export function parseInstalled(text, statusState) {
   var out = {};
+  var t = str(text).trim();
+  if (t.charAt(0) === "{") return parseStatus(t, statusState);
   var lines = str(text).split("\n");
   for (var i = 0; i < lines.length; i++) {
     var m = lines[i].trim().match(/^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\s+([0-9a-f]{7,40}))?$/);
     if (m) out[m[1]] = { sha: m[2] || "" };
+  }
+  return out;
+}
+
+var ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+var SHA_RE = /^[0-9a-f]{40}$/;
+
+function parseStatus(text, statusState) {
+  var out = {};
+  var doc;
+  try {
+    doc = JSON.parse(text);
+  } catch (e) {
+    return out;
+  }
+  if (!doc || doc.kind !== "omarchy-plugin-check/status" || !Array.isArray(doc.plugins)) return out;
+  for (var i = 0; i < doc.plugins.length; i++) {
+    var e = doc.plugins[i] || {};
+    var id = ID_RE.test(str(e.listedId)) ? e.listedId : str(e.id);
+    if (!ID_RE.test(id) || out[id]) continue;
+    var head = SHA_RE.test(str(e.head)) ? e.head : "";
+    var rev = e.reviewed || {};
+    out[id] = {
+      sha: head.slice(0, 7),
+      dir: str(e.dir),
+      checkerState: str(e.state),
+      commitMatch: typeof e.commitMatch === "boolean" ? e.commitMatch : null,
+      treeMatch: typeof e.treeMatch === "boolean" ? e.treeMatch : null,
+      moved: e.moved === true,
+      origin: str(e.origin),
+      repin: e.repin === "forward" || e.repin === "back" ? e.repin : null,
+      reviewed: SHA_RE.test(str(rev.commit)) ? rev.commit : "",
+      note: str(e.note)
+    };
+    if (statusState) out[id].state = statusState({ state: e.state, repin: out[id].repin, commitMatch: out[id].commitMatch, treeMatch: out[id].treeMatch });
   }
   return out;
 }

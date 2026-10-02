@@ -84,6 +84,14 @@ Rectangle {
                 size: 10
                 color: Theme.muted
             }
+
+            // The checker compares the tree too (ADR-0034): "=" means the reviewed content.
+            Txt {
+                visible: row.entry.treeMatch === true || row.entry.treeMatch === false
+                text: "tree " + (row.entry.treeMatch ? "=" : "≠")
+                size: 10
+                color: row.entry.treeMatch ? Theme.green : Theme.muted
+            }
         }
 
         Txt {
@@ -91,6 +99,13 @@ Rectangle {
             text: "upstream " + (row.entry.upstream || "")
             size: 10
             color: Theme.blue
+        }
+
+        Txt {
+            visible: !!row.entry.moved && row.st !== "update"
+            text: "moved · origin is a former repo name"
+            size: 10
+            color: Theme.muted
         }
     }
 
@@ -130,7 +145,7 @@ Rectangle {
             icon: "up"
             label: "update"
             enabledState: Installer.canInstall
-            tipText: Installer.why
+            tipText: Installer.canInstall ? "a newer commit was reviewed: omarchy-plugin-check pin checks it out and verifies commit + tree." : Installer.why
             tipRight: true
             onClicked: Store.askInstall(row.rec, true)
         }

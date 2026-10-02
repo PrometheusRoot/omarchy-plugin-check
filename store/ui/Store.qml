@@ -588,7 +588,8 @@ Singleton {
         target: Installer
 
         function onFinished(r, ok) {
-            store.showToast(ok ? "installed " + r.name + (r.commit ? " · pinned " + String(r.commit).slice(0, 7) : "") : "install failed · " + r.name);
+            const verb = Installer.repin ? "pinned " : "installed ";
+            store.showToast(ok ? verb + r.name + (r.commit ? " · pinned " + String(r.commit).slice(0, 7) : "") : (Installer.repin ? "pin failed · " : "install failed · ") + r.name);
             store.refreshInstalled();
         }
 

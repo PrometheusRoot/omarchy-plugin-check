@@ -121,13 +121,13 @@ Item {
             anchors.centerIn: parent
             visible: Store.dialog === "install" && ov.st === "confirm"
             outcome: ov.r.verdict || "unreviewed"
-            title: "install " + (ov.r.name || "") + "?"
-            footNote: "you can remove it any time from installed"
+            title: (Installer.repin ? (Installer.stateOf(ov.r) === "stale" ? "roll back " : "update ") : "install ") + (ov.r.name || "") + "?"
+            footNote: Installer.repin ? "omarchy plugin update is never used: it moves to unreviewed upstream HEAD" : "you can remove it any time from installed"
 
             Txt {
                 width: parent.width
                 textFormat: Text.StyledText
-                text: ov.r.verdict === "unreviewed" ? "No provider has reviewed this commit yet. You would be running code nobody has looked at." : "Combined verdict is <font color='" + Theme.c(F.outcome(ov.r.verdict).color) + "'><b>" + ov.r.verdict + "</b></font>" + (ov.r.risk !== null && ov.r.risk !== undefined ? " (" + ov.r.risk + "/100)" : "") + ". " + (ov.r.verdict === "risky" ? "A trusted provider found a wide surface; read the findings before continuing." : "Declared capabilities go beyond a local widget; nothing hard-failed.")
+                text: Installer.repin ? "Checks out the reviewed commit " + F.shortSha(ov.r.commit) + " (combined verdict <b>" + (ov.r.verdict || "unreviewed") + "</b>) after fetching the listed repository, then verifies commit and tree against the signed snapshot and rescans omarchy-shell." : ov.r.verdict === "unreviewed" ? "No provider has reviewed this commit yet. You would be running code nobody has looked at." : "Combined verdict is <font color='" + Theme.c(F.outcome(ov.r.verdict).color) + "'><b>" + ov.r.verdict + "</b></font>" + (ov.r.risk !== null && ov.r.risk !== undefined ? " (" + ov.r.risk + "/100)" : "") + ". " + (ov.r.verdict === "risky" ? "A trusted provider found a wide surface; read the findings before continuing." : "Declared capabilities go beyond a local widget; nothing hard-failed.")
                 color: Theme.textSecondary
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
@@ -164,7 +164,7 @@ Item {
                     y: 8
                     width: parent.width - 20
                     textFormat: Text.StyledText
-                    text: F.escapeHtml((Inst.command(ov.r) || ["omarchy-plugin-check", "--add", "--pin", ov.r.repo || ov.r.id]).join(" ")) + "<br><font color='" + Theme.muted + "'># clones, pins reviewed commit " + F.shortSha(ov.r.commit) + ", enables, logs to ~/.config/omarchy/CHANGES.md</font>"
+                    text: Installer.repin ? F.escapeHtml((Inst.pinCommand(ov.r) || ["omarchy-plugin-check", "pin", ov.r.id]).join(" ")) + "<br><font color='" + Theme.muted + "'># fetches, checks out " + F.shortSha(ov.r.commit) + " detached, verifies commit + tree, logs to ~/.config/omarchy/CHANGES.md</font>" : F.escapeHtml((Inst.command(ov.r) || ["omarchy-plugin-check", "--add", "--pin", ov.r.repo || ov.r.id]).join(" ")) + "<br><font color='" + Theme.muted + "'># clones, pins reviewed commit " + F.shortSha(ov.r.commit) + ", enables, logs to ~/.config/omarchy/CHANGES.md</font>"
                     size: 11
                     wrapMode: Text.WrapAnywhere
                     elide: Text.ElideNone
@@ -179,9 +179,9 @@ Item {
                     onClicked: Store.closeDialog()
                 },
                 Btn {
-                    kind: ov.r.verdict === "risky" ? "risky" : "caution"
-                    icon: "dl"
-                    label: "install anyway"
+                    kind: Installer.repin ? "primary" : ov.r.verdict === "risky" ? "risky" : "caution"
+                    icon: Installer.repin ? "up" : "dl"
+                    label: Installer.repin ? "pin reviewed commit" : "install anyway"
                     key: "y"
                     focused: true
                     onClicked: Installer.confirm()
@@ -194,8 +194,8 @@ Item {
             anchors.centerIn: parent
             visible: Store.dialog === "install" && (ov.st === "running" || ov.st === "done" || ov.st === "failed")
             glyph: ov.st === "failed" ? "alert" : "dl"
-            title: (ov.st === "done" ? "installed " : ov.st === "failed" ? "install failed · " : "installing ") + (Installer.rec ? Installer.rec.name : "")
-            footNote: ov.st === "running" ? (Installer.dev ? "fake runner (--dev) · " : "") + "running omarchy-plugin-check --add --pin" : ov.st === "failed" ? "exit " + ov.flow.code : "done"
+            title: (Installer.repin ? (ov.st === "done" ? "pinned " : ov.st === "failed" ? "pin failed · " : "pinning ") : ov.st === "done" ? "installed " : ov.st === "failed" ? "install failed · " : "installing ") + (Installer.rec ? Installer.rec.name : "")
+            footNote: ov.st === "running" ? (Installer.dev ? "fake runner (--dev) · " : "") + (Installer.repin ? "running omarchy-plugin-check pin" : "running omarchy-plugin-check --add --pin") : ov.st === "failed" ? "exit " + ov.flow.code : "done"
 
             Rectangle {
                 width: parent.width

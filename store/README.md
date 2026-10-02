@@ -28,6 +28,14 @@ Install runs `omarchy-plugin-check --add --pin <repo>` (argv, GitHub URLs only).
 checker on `PATH`, install is disabled with "checker not installed"; blocked plugins are always
 refused. Remove runs `omarchy-plugin-remove <id> --yes` after a confirm.
 
+The installed tab reads `omarchy-plugin-check status --json` (offline) when the checker is
+installed: the listed id (also for a checkout at a former repository name, shown as *moved*),
+commit and tree against the signed snapshot (`= reviewed · tree =`), and whether a reviewed
+commit is newer (*update*) or HEAD is past the review (*roll back*). Both actions run
+`omarchy-plugin-check pin --yes <id>` (argv, plain ids only) after the store's own confirm;
+`omarchy plugin update` is never used for them (ADR-0035). Without the checker the tab falls back
+to `git rev-parse HEAD` per plugin directory.
+
 ## Keys
 
 `/` search · `1`–`5` tabs · `j k ↑ ↓ ← →` move · `⏎` open · `esc` back/close · `i` install

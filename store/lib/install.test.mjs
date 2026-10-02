@@ -96,3 +96,31 @@ test("steps name the repo and the reviewed commit", () => {
   assert.ok(st[1].includes("o/p"));
   assert.ok(st[2].includes("26b1fa8"));
 });
+
+test("repin: always the store's confirm first, then `pin --yes <id>` as argv", () => {
+  const r = { ...env, repin: true };
+  for (const v of ["safe", "caution", "risky", "unreviewed"]) assert.equal(I.start(p(v), r).state, "confirm", v);
+  assert.equal(I.start(p("blocked"), r).state, "refused");
+  assert.equal(I.start(p("safe"), { ...r, checker: false }).reason, "checker not installed");
+  assert.equal(I.start(p("safe"), { ...r, installed: true }).state, "confirm"); // installed is the point
+  const s = I.start(p("safe"), r);
+  assert.equal(s.repin, true);
+  assert.equal(s.steps.length, I.steps(p("safe")).length);
+  assert.match(s.steps[1], /^fetch o\/p$/);
+  assert.deepEqual(I.pinCommand(p("safe")), ["omarchy-plugin-check", "pin", "--yes", "o.p"]);
+  for (const id of ["--force", "../x", "a..b", "", "a b"]) assert.equal(I.pinCommand(p("safe", { id })), null, id);
+  assert.equal(I.start(p("safe", { id: "--yes" }), r).state, "unavailable");
+});
+
+test("statusState maps a checker status entry to the installed row state", () => {
+  assert.equal(I.statusState(null), "unknown");
+  assert.equal(I.statusState({ state: "blocked", repin: null }), "blocked");
+  assert.equal(I.statusState({ state: "stale", repin: "forward" }), "update");
+  assert.equal(I.statusState({ state: "stale", repin: "back" }), "stale");
+  assert.equal(I.statusState({ state: "safe", commitMatch: true }), "ok");
+  assert.equal(I.statusState({ state: "caution", commitMatch: false, treeMatch: true }), "ok");
+  assert.equal(I.statusState({ state: "unlisted" }), "unlisted");
+  assert.equal(I.statusState({ state: "retired" }), "retired");
+  assert.equal(I.statusState({ state: "stale", repin: null }), "stale");
+  assert.equal(I.statusState({ state: "unreviewed" }), "unreviewed");
+});

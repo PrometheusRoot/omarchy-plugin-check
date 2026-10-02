@@ -130,3 +130,30 @@ test("parseInstalled reads `id sha` lines", () => {
   assert.equal(m["no-git"].sha, "");
   assert.equal(m["../evil"], undefined);
 });
+
+test("parseInstalled reads the checker's status --json: listed id, tree, moved, repin", () => {
+  const sha = (c) => c.repeat(40);
+  const doc = {
+    kind: "omarchy-plugin-check/status",
+    plugins: [
+      { id: "dir-name", listedId: "o.moved", state: "safe", head: sha("a"), commitMatch: true, treeMatch: true, moved: true, origin: "https://github.com/o/old", repin: null, reviewed: { commit: sha("a") }, note: "moved: listed at github.com/o/new; origin is its former repository" },
+      { id: "o.update", listedId: "o.update", state: "stale", head: sha("b"), commitMatch: false, treeMatch: false, repin: "forward", reviewed: { commit: sha("c") } },
+      { id: "o.fork", listedId: null, state: "unlisted", head: "zz" },
+      { id: "../evil", listedId: null, state: "unlisted" },
+      { id: "o.update", listedId: "o.update", state: "safe" }
+    ]
+  };
+  const m = D.parseInstalled(JSON.stringify(doc), (e) => (e.repin === "forward" ? "update" : e.commitMatch ? "ok" : e.state));
+  assert.deepEqual(Object.keys(m).sort(), ["o.fork", "o.moved", "o.update"]);
+  assert.equal(m["o.moved"].moved, true);
+  assert.equal(m["o.moved"].treeMatch, true);
+  assert.equal(m["o.moved"].state, "ok");
+  assert.equal(m["o.moved"].sha, "aaaaaaa");
+  assert.equal(m["o.update"].state, "update");
+  assert.equal(m["o.update"].reviewed, sha("c"));
+  assert.equal(m["o.fork"].sha, "");
+  assert.equal(m["o.fork"].treeMatch, null);
+  assert.deepEqual(D.parseInstalled("{not json"), {});
+  assert.deepEqual(D.parseInstalled('{"kind":"other","plugins":[]}'), {});
+  assert.equal(D.parseInstalled(JSON.stringify(doc))["o.update"].state, undefined);
+});

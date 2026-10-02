@@ -33,17 +33,45 @@ export function command(p) {
   return [CHECKER, "--add", "--pin", "--yes", "--enable", String(p.repo)];
 }
 
+// Re-pin an installed plugin to its reviewed commit (update or roll back, ADR-0035). The id
+// must be a plain plugin id so it can never become a checker flag.
+export var ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+export function pinCommand(p) {
+  if (!p || !ID_RE.test(String(p.id || "")) || String(p.id).indexOf("..") !== -1) return null;
+  // why: like command(): the store already confirmed in its own dialog and has no terminal.
+  return [CHECKER, "pin", "--yes", String(p.id)];
+}
+
+export function pinSteps(p) {
+  var repo = String(p.repo || p.id).replace("https://github.com/", "");
+  return [
+    "verify snapshot signature",
+    "fetch " + repo,
+    "compare with the reviewed commit " + (p.commit ? String(p.commit).slice(0, 7) : "(none)"),
+    "check out and verify commit + tree",
+    "rescan omarchy-shell",
+    "log to ~/.config/omarchy/CHANGES.md"
+  ];
+}
+
 export function removeCommand(p) {
   if (!p || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(p.id || ""))) return null;
   return ["omarchy-plugin-remove", String(p.id), "--yes"];
 }
 
-// env: {checker: bool, dev: bool, installed: bool}
+// env: {checker: bool, dev: bool, installed: bool, repin: bool}
+// repin (update / roll back an installed plugin): always the store's own confirm first.
 export function start(p, env) {
-  var base = { state: "idle", id: p ? p.id : null, verdict: p ? p.verdict : null, steps: [], step: 0, log: [], code: null, reason: "" };
+  var repin = !!(env && env.repin);
+  var base = { state: "idle", id: p ? p.id : null, verdict: p ? p.verdict : null, repin: repin, steps: [], step: 0, log: [], code: null, reason: "" };
   if (!p) return base;
-  base.steps = steps(p);
+  base.steps = repin ? pinSteps(p) : steps(p);
   if (p.verdict === "blocked") return set(base, { state: "refused", reason: "blocked" });
+  if (repin) {
+    if (!(env.checker || env.dev)) return set(base, { state: "unavailable", reason: "checker not installed" });
+    if (!pinCommand(p)) return set(base, { state: "unavailable", reason: "not installable from the store" });
+    return set(base, { state: "confirm" });
+  }
   if (env && env.installed) return set(base, { state: "idle", reason: "installed" });
   if (!(env && (env.checker || env.dev))) return set(base, { state: "unavailable", reason: "checker not installed" });
   if (!command(p)) return set(base, { state: "unavailable", reason: "not installable from the store" });
@@ -90,7 +118,7 @@ export function reduce(s, ev) {
 
 // The dev runner replays this: one progress event per step, then exit 0.
 export function fakeScript(p, stepMs) {
-  var n = steps(p).length;
+  var n = steps(p).length; // pinSteps has the same length
   var out = [];
   for (var k = 1; k <= n; k++) out.push({ at: k * stepMs, ev: { type: "progress", step: k } });
   out.push({ at: (n + 1) * stepMs, ev: { type: "exit", code: 0 } });
@@ -105,6 +133,20 @@ export function installState(sha, p) {
   if (!p || !p.commit) return "unreviewed";
   if (!sha) return "unknown";
   return sha === p.commit || String(p.commit).indexOf(sha) === 0 ? "ok" : "stale";
+}
+
+// Installed row state from one `omarchy-plugin-check status --json` entry (identity, former
+// repositories, commit and tree already decided by the checker, ADR-0034/0035):
+// update = a newer reviewed commit to pin; stale = HEAD is past the review (roll back);
+// ok = at the reviewed commit or its tree; else the checker's state.
+export function statusState(e) {
+  if (!e) return "unknown";
+  if (e.state === "blocked") return "blocked";
+  if (e.repin === "forward") return "update";
+  if (e.repin === "back") return "stale";
+  if (e.commitMatch === true || e.treeMatch === true) return "ok";
+  if (e.state === "unlisted" || e.state === "retired" || e.state === "stale") return e.state;
+  return "unreviewed";
 }
 
 export function buttonKind(verdict) {

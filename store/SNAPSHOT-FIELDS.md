@@ -94,7 +94,8 @@ details or `fac` — opening the detail, or the ranking explainer, completes it 
 
 | Source | Used for |
 |---|---|
-| `~/.config/omarchy/plugins/*/` + `git rev-parse HEAD` | installed list and installed-vs-reviewed state |
+| `omarchy-plugin-check status --json` (when the checker is installed) | installed list keyed by listed id: `state`, `commitMatch`, `treeMatch`, `moved`, `repin` (update / roll back), `reviewed.commit` (`Data.parseInstalled`, `Inst.statusState`); the checker reads `verdict.commit`, `verdict.tree` and `formerRepos` from store.json, so the store needs neither in its bundle columns |
+| `~/.config/omarchy/plugins/*/` + `git rev-parse HEAD` | fallback without the checker: installed list and installed-vs-reviewed commit |
 | `command -v omarchy-plugin-check` | install enabled / "checker not installed" |
 | `~/.local/state/omarchy/current/theme/colors.toml` | theme tokens (lib/theme.mjs) |
 | `~/.local/state/omarchy-plugin-check/store-bundle-version` | last accepted bundle version (rollback check) |
