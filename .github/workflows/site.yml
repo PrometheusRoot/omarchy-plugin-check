@@ -1,0 +1,117 @@
+name: site
+
+# Astro site (site/, ADR-0034). PRs: lint, types, unit + e2e tests and Lighthouse budgets over the
+# committed fixture. main/master: build over the published snapshot (verified first) and deploy to
+# GitHub Pages; skipped until the repository variable OPC_SNAPSHOT_URL names a snapshot tarball.
+
+on:
+  pull_request:
+    paths: [site/**, spec/schemas/**, spec/keys/**, .github/workflows/site.yml]
+  push:
+    branches: [main, master]
+    paths: [site/**, spec/schemas/**, spec/keys/**, .github/workflows/site.yml]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: site
+    env:
+      OPC_API_DIR: tests/fixtures/api/v1
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Install (lockfile only)
+        run: npm ci
+
+      - name: Biome
+        run: npx biome ci .
+
+      - name: astro check (strictest tsconfig)
+        run: npx astro check
+
+      - name: Vitest
+        run: npx vitest run
+
+      - name: Playwright e2e (4 specs over the fixture)
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Lighthouse CI budgets (a11y >= 0.95, perf >= 0.9)
+        env:
+          OPC_SITE_BASE: /
+        run: |
+          npx astro build
+          npx lhci autorun
+
+  pages:
+    if: github.event_name != 'pull_request' && vars.OPC_SNAPSHOT_URL != ''
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Fetch the snapshot and verify the signed bundle before using it
+        env:
+          SNAPSHOT_URL: ${{ vars.OPC_SNAPSHOT_URL }}
+          SNAPSHOT_DEV: ${{ vars.OPC_SNAPSHOT_DEV }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/snapshot"
+          curl -fsSL --proto '=https' "$SNAPSHOT_URL" | tar -xz -C "$RUNNER_TEMP/snapshot"
+          signers=spec/keys/allowed_signers
+          if [[ "$SNAPSHOT_DEV" == "true" ]]; then
+            signers=spec/keys/allowed_signers.dev
+            export OPC_STORE_DEV_KEYS=1
+          fi
+          OPC_STORE_ALLOWED_SIGNERS="$signers" OPC_STORE_VERIFY_STATE="$RUNNER_TEMP/bundle-version" \
+            store/bin/omarchy-plugin-store-verify bundle "$RUNNER_TEMP/snapshot"
+
+      - name: Build
+        working-directory: site
+        run: |
+          npm ci
+          OPC_API_DIR="$RUNNER_TEMP/snapshot/api/v1" OPC_SNAPSHOT_DIR="$RUNNER_TEMP/snapshot" npx astro build
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  deploy:
+    needs: pages
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

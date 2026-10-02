@@ -1,0 +1,9 @@
+{
+  "extends": "astro/tsconfigs/strictest",
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist", "node_modules", ".lighthouseci", "test-results", "playwright-report"],
+  "compilerOptions": {
+    "types": ["node"],
+    "verbatimModuleSyntax": true
+  }
+}

@@ -1,0 +1,113 @@
+---
+// Provider registry: who may publish verdicts, at which tier, under which identity and validity,
+// and what each one covers in this snapshot (api/v1/meta.json + providers.json when present).
+import Criteria from '../components/Criteria.astro';
+import Icon from '../components/Icon.astro';
+import Base from '../layouts/Base.astro';
+import { coverage, load } from '../lib/data';
+import { day, fmtInt, isCapped, STATE_ICON, TIER_NOTE, verdictState } from '../lib/model';
+import { pluginHref } from '../lib/render';
+import type { Verdict } from '../lib/types';
+
+const base = import.meta.env.BASE_URL;
+const { meta, registry, byId } = load();
+const cov = coverage();
+const reg = new Map((registry?.providers ?? []).map((p) => [p.id, p]));
+const VERDICTS: Verdict[] = ['safe', 'caution', 'risky', 'blocked', 'unknown'];
+const total = byId.size;
+const listable = (ids: string[]) => ids.length > 0 && ids.length < 61;
+---
+<Base title="providers" description="The provider registry: tiers, signing identities, validity windows and coverage of every security provider." nav="providers">
+  <div class="rhead">
+    <div class="t"><h1>providers</h1></div>
+    <span class="mute mono" style="font-size:12px">
+      registry v{meta.registry.version} · expires {day(meta.registry.expires)} · {meta.registry.signed ? 'signed' : 'unsigned'}{meta.registry.dev ? ' · dev' : ''}
+    </span>
+  </div>
+  <p class="mute" style="margin:0 0 16px;max-width:80ch;font-size:13px">
+    combined = worst of core + verified providers. community and unsigned providers are shown on every report but count as at most caution, and can never make a plugin safe.
+    a blocked verdict without file:line evidence counts as risky.
+  </p>
+  <div class="provs">
+    {
+      meta.providers.map((p) => {
+        const r = reg.get(p.id);
+        const c = cov.get(p.id);
+        const signed = p.verification === 'sigstore';
+        return (
+          <article class="prov card" id={`p-${p.id}`}>
+            <header>
+              <span class:list={['sig', signed ? 'ok' : 'no']}><Icon id={signed ? 'i-sig' : 'i-unsig'} /></span>
+              <h2>{p.id}</h2>
+              <span class:list={['chip sm tip', p.tier === 'core' && 'brand', p.tier === 'verified' && 'stale']} data-tip={TIER_NOTE[p.tier]}>
+                {p.tier}{isCapped(p.tier) ? ' ≤caution' : ''}
+              </span>
+              <span class:list={['chip sm', p.status === 'ok' ? 'safe' : 'blocked']}>{p.status === 'ok' ? 'feed ok' : 'rejected'}</span>
+            </header>
+            <p style="margin:0;font-size:13px">{p.name}. <span class="mute">{TIER_NOTE[p.tier]}.</span></p>
+            <dl class="kv">
+              <dt>kind</dt>
+              <dd>{r?.kind ?? (p.id === 'marketplace' ? 'marketplace-baseline' : 'feed')}</dd>
+              <dt>sig</dt>
+              <dd>
+                {signed ? <span class="sig ok">sigstore keyless</span> : <span class="sig no">{p.verification === 'unsigned-dev' ? 'unsigned (dev registry only)' : 'unsigned'}</span>}
+              </dd>
+              <dt>identity</dt>
+              <dd class="mono" style="font-size:11px;word-break:break-all">{r?.sigstore?.certificateIdentity ?? '—'}</dd>
+              <dt>issuer</dt>
+              <dd class="mono" style="font-size:11px;word-break:break-all">{r?.sigstore?.oidcIssuer ?? '—'}</dd>
+              <dt>feed</dt>
+              <dd class="mono" style="font-size:11px;word-break:break-all">
+                {r?.feedUrl ? (r.feedUrl.startsWith('https://') ? <a href={r.feedUrl} rel="noopener">{r.feedUrl}</a> : r.feedUrl) : '—'}
+                {p.feedVersion !== null && <div class="mute">version {p.feedVersion} · expires {day(p.feedExpires)}</div>}
+              </dd>
+              <dt>valid</dt>
+              <dd class="mono" style="font-size:12px">
+                {r ? `${day(r.validFrom)} → ${r.validUntil ? day(r.validUntil) : 'open'}` : '—'}
+                {r && r.excludedWindows.length > 0 && <div class="c-caution">{r.excludedWindows.length} excluded window(s)</div>}
+              </dd>
+              <dt>checks</dt>
+              <dd>{r && r.criteriaSupported.length ? <Criteria criteria={{ checked: r.criteriaSupported }} /> : <span class="mute">none declared</span>}</dd>
+              <dt>conflicts</dt>
+              <dd>{r && r.conflictsOfInterest.length ? r.conflictsOfInterest.join(', ') : '—'}</dd>
+              <dt>contact</dt>
+              <dd style="word-break:break-all">{r?.contact ? (r.contact.startsWith('https://') ? <a href={r.contact} rel="noopener">{r.contact}</a> : r.contact) : '—'}</dd>
+            </dl>
+            <div>
+              <span class="lbl">covers {fmtInt(c?.rows ?? 0)} / {fmtInt(total)}</span>
+              <div class="cover" style="margin-top:6px">
+                {VERDICTS.filter((v) => c?.verdicts[v]).map((v) => {
+                  const s = verdictState(v);
+                  return (
+                    <span class={`chip ${s}`}>
+                      <Icon id={STATE_ICON[s]} size="s" />
+                      {s} {fmtInt(c?.verdicts[v] ?? 0)}
+                    </span>
+                  );
+                })}
+              </div>
+              {p.tier !== 'unsigned' && c && listable(c.ids) && (
+                <div class="cover" style="margin-top:6px">
+                  {c.ids.map((id) => <a class="chip sm" href={pluginHref(base, id)}>{byId.get(id)?.name ?? id}</a>)}
+                </div>
+              )}
+            </div>
+          </article>
+        );
+      })
+    }
+  </div>
+  {
+    meta.rejected.length > 0 && (
+      <section class="sect card" style="margin-top:16px" aria-labelledby="rej-h">
+        <header><Icon id="i-alert" /><h2 id="rej-h">rejected rows</h2><span class="mute">{meta.rejected.length}</span></header>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th scope="col">provider</th><th scope="col">path</th><th scope="col">reason</th></tr></thead>
+            <tbody>{meta.rejected.slice(0, 200).map((x) => <tr><td class="mono">{x.provider}</td><td class="mono">{x.path}</td><td>{x.reason}</td></tr>)}</tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</Base>

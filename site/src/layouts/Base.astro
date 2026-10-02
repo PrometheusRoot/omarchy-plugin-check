@@ -1,0 +1,92 @@
+---
+import '@fontsource-variable/geist/wght.css';
+import '@fontsource-variable/jetbrains-mono/wght.css';
+import '../styles/site.css';
+import geistLatin from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
+import monoLatin from '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url';
+import Mark from '../components/Mark.astro';
+import { load } from '../lib/data';
+
+interface Props {
+  title: string;
+  description: string;
+  nav?: 'index' | 'providers' | 'about' | 'api' | 'report' | 'none';
+}
+const { title, description, nav = 'none' } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const { meta } = load();
+const tabs = [
+  { id: 'index', href: base, icon: 'i-list', label: 'index' },
+  { id: 'providers', href: `${base}providers/`, icon: 'i-prov', label: 'providers' },
+  { id: 'about', href: `${base}about/`, icon: 'i-info', label: 'about' },
+  { id: 'api', href: `${base}api/`, icon: 'i-api', label: 'api' },
+] as const;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const fullTitle = title === 'omarchy-plugin-check' ? title : `${title} · omarchy-plugin-check`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    <link rel="preload" href={geistLatin} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={monoLatin} as="font" type="font/woff2" crossorigin />
+    <link rel="icon"href={`${base}favicon.svg`} type="image/svg+xml" />
+    <meta name="color-scheme" content="dark light" />
+    <script is:inline>
+      // why: apply the stored skin before first paint (no flash); storage may throw.
+      try {
+        var s = localStorage.getItem('opc.skin');
+        if (s && s !== 'auto') document.documentElement.setAttribute('data-skin', s);
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">skip to content</a>
+    <header class="top">
+      <div class="wrap">
+        <a class="brand" href={base} aria-label="omarchy-plugin-check home">
+          <Mark />
+          <span>
+            <span class="t">omarchy-plugin-check</span>
+            <small>independent community review · not affiliated with omarchy</small>
+          </span>
+        </a>
+        <nav class="tabs" aria-label="site">
+          {
+            tabs.map((t) => (
+              <a class="btn" href={t.href} aria-current={nav === t.id ? 'page' : undefined}>
+                <svg class="i m" aria-hidden="true">
+                  <use href={`${base}icons.svg#${t.icon}`} />
+                </svg>
+                {t.label}
+              </a>
+            ))
+          }
+        </nav>
+        <button class="btn tip r" id="themeBtn" type="button" data-tip="cycle theme (also: press T)" aria-label="cycle theme (T)">
+          <svg class="i m" aria-hidden="true"><use href={`${base}icons.svg#i-palette`} /></svg>
+          <span id="themeName">tokyo night</span>
+          <span class="kbd" aria-hidden="true">T</span>
+        </button>
+      </div>
+    </header>
+    <main id="main" class="wrap page">
+      <slot />
+    </main>
+    <footer class="foot">
+      <div class="wrap">
+        <span>independent community project · not affiliated with omarchy</span>
+        <span>data {meta.generatedAt.replace('T', ' ').slice(0, 16)}Z{meta.registry.dev ? ' · dev registry' : ''}</span>
+        <span>metadata from <a href="https://plugins.omarchy.org/" rel="noopener">plugins.omarchy.org</a></span>
+        <a href={`${base}api/`}>static api</a>
+      </div>
+    </footer>
+    <script>
+      import '../client/theme';
+    </script>
+  </body>
+</html>

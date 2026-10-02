@@ -1,0 +1,39 @@
+---
+// Marketplace metadata (the only source of plugin identity, ADR-0010), with a link back to it.
+import { day, fmtInt } from '../lib/model';
+import { marketplaceUrl } from '../lib/render';
+import type { PluginDoc } from '../lib/types';
+import Icon from './Icon.astro';
+
+interface Props {
+  doc: PluginDoc;
+}
+const { doc } = Astro.props;
+const l = doc.listing;
+const mkt = doc.providers.find((r) => r.provider === 'marketplace');
+---
+<div class="card">
+  <span class="lbl">marketplace <a href={marketplaceUrl(doc.id)} rel="noopener" style="letter-spacing:0;text-transform:none">↗<span class="sr"> open on plugins.omarchy.org</span></a></span>
+  <dl class="kv">
+    <dt>category</dt>
+    <dd>{l?.cat ?? '—'}</dd>
+    <dt>kind</dt>
+    <dd>{l?.kind ?? '—'}</dd>
+    <dt>tags</dt>
+    <dd>{(l?.tags ?? []).length ? (l?.tags ?? []).map((t) => <span class="chip sm dim" style="margin:0 2px 2px 0">{t}</span>) : '—'}</dd>
+    <dt>author</dt>
+    <dd>{l?.author ?? '—'}</dd>
+    <dt>license</dt>
+    <dd>{l?.license ?? <span class="c-caution">none</span>}</dd>
+    <dt>stars</dt>
+    <dd><Icon id="i-star" size="s" /> {fmtInt(l?.gh?.stars)}</dd>
+    <dt>status</dt>
+    <dd>{doc.listingState === 'listed' ? (l?.verif ?? 'listed') : doc.listingState}</dd>
+    <dt>baseline</dt>
+    <dd>{typeof mkt?.detail?.outcome === 'string' ? mkt.detail.outcome : '—'}</dd>
+    <dt>listed</dt>
+    <dd>{day(l?.listed)}</dd>
+    <dt>rank</dt>
+    <dd>{l?.rank ? `#${l.rank}` : '—'}</dd>
+  </dl>
+</div>

@@ -1,0 +1,34 @@
+{
+  "name": "omarchy-plugin-check-site",
+  "private": true,
+  "type": "module",
+  "description": "Public website for omarchy-plugin-check: index, per-plugin reports, providers, static API (ADR-0034).",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "lint": "biome ci .",
+    "fmt": "biome check --write .",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "lhci": "lhci autorun"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "astro": "5.18.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@biomejs/biome": "2.4.16",
+    "@lhci/cli": "0.15.1",
+    "@playwright/test": "1.59.1",
+    "@types/node": "24.19.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

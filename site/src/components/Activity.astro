@@ -1,0 +1,42 @@
+---
+// 52-week commit sparkline (api/v1 plugin `activity.weeks`) and the collector's GitHub numbers.
+import { activitySeries, day, fmtInt, sparkPoints } from '../lib/model';
+import type { PluginDoc } from '../lib/types';
+
+interface Props {
+  doc: PluginDoc;
+  tiles?: boolean;
+}
+const { doc, tiles = false } = Astro.props;
+const gh = doc.listing?.gh;
+const series = activitySeries(doc.activity?.weeks);
+const W = 300;
+const H = 48;
+const pts = series ? sparkPoints(series, W, H) : [];
+const line = pts.map(([x, y]) => `${x},${y}`).join(' ');
+const last = pts[pts.length - 1];
+const total = series ? series.reduce((a, b) => a + b, 0) : 0;
+---
+{
+  tiles && gh && (
+    <div class="tiles">
+      <div class="tile"><span class="l">stars</span><span class="v num">{fmtInt(gh.stars)}</span><span class="d">+{fmtInt(gh.vel30)} in 30d</span></div>
+      <div class="tile"><span class="l">commits 90d</span><span class="v num">{fmtInt(gh.c90)}</span></div>
+      <div class="tile"><span class="l">contributors</span><span class="v num">{fmtInt(gh.contrib)}</span><span class="d">bus factor {fmtInt(gh.bus)}</span></div>
+      <div class="tile"><span class="l">release</span><span class="v sm">{gh.lastRelease ?? 'none'}</span><span class="d">{fmtInt(gh.rel180)} in 180d</span></div>
+      <div class="tile"><span class="l">last commit</span><span class="v sm">{day(gh.lastCommit)}</span></div>
+      <div class="tile"><span class="l">issues</span><span class="v num">{fmtInt(gh.issues)}</span><span class="d">{gh.respH === null ? 'response n/a' : `~${Math.round(gh.respH)}h to reply`}</span></div>
+    </div>
+  )
+}
+{
+  series && last ? (
+    <svg class="spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`commits per week, last 52 weeks: ${total} in total`}>
+      <polygon points={`4,${H - 4} ${line} ${last[0]},${H - 4}`} fill="color-mix(in oklab,var(--blue) 18%,transparent)" />
+      <polyline points={line} fill="none" stroke="var(--blue)" stroke-width="2" vector-effect="non-scaling-stroke" />
+      <circle cx={last[0]} cy={last[1]} r="3" fill="var(--blue)" />
+    </svg>
+  ) : (
+    tiles && !gh && <p class="na">no github activity collected</p>
+  )
+}

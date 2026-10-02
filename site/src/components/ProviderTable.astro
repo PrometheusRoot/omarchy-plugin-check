@@ -1,0 +1,111 @@
+---
+// VirusTotal-style rows: every provider's latest row, also when the combined verdict caps or ignores it.
+import {
+  ADJUSTMENT_TEXT,
+  countsAs,
+  day,
+  isCapped,
+  providerShort,
+  STATE_ICON,
+  sha7,
+  TIER_NOTE,
+  verdictState,
+} from '../lib/model';
+import type { ProviderRow } from '../lib/types';
+import Criteria from './Criteria.astro';
+import Icon from './Icon.astro';
+
+interface Props {
+  rows: ProviderRow[];
+  selected: string | null;
+  reviewedCommit: string | null;
+}
+const { rows, selected, reviewedCommit } = Astro.props;
+const sigText = (r: ProviderRow) =>
+  r.verification === 'sigstore' ? 'sig' : r.verification === 'unsigned-dev' ? 'dev · unsigned' : 'unsigned';
+---
+<div class="card tblwrap pvcard">
+  <table class="ptable" aria-label="provider verdicts">
+    <thead>
+      <tr>
+        <th scope="col">provider</th><th scope="col">tier</th><th scope="col">sig</th><th scope="col">verdict</th>
+        <th scope="col">risk</th><th scope="col">counts as</th><th scope="col">criteria</th>
+        <th scope="col">commit · tree</th><th scope="col">when</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((r) => {
+          const pub = verdictState(r.verdict);
+          const eff = verdictState(r.effectiveVerdict);
+          const counts = countsAs(r);
+          const report = r.detail?.report;
+          return (
+            <tr class:list={[r.provider === selected && 'sel']} data-row={r.provider}>
+              <td>
+                <button class="vt" type="button" data-p={r.provider} aria-controls={`panel-${r.provider}`} aria-pressed={r.provider === selected ? 'true' : 'false'}>
+                  <Icon id={STATE_ICON[pub]} size="s" class={`c-${pub}`} />
+                  <b>{providerShort(r.provider)}</b>
+                  <span class="sr"> details</span>
+                </button>
+              </td>
+              <td>
+                <span class:list={['chip sm tip', r.tier === 'core' && 'brand', r.tier === 'verified' && 'stale']} data-tip={`${r.tier}: ${TIER_NOTE[r.tier]}`}>
+                  {r.tier}
+                  {isCapped(r.tier) ? ' ≤caution' : ''}
+                </span>
+              </td>
+              <td>
+                <span class:list={['vt sig tip', r.verification === 'sigstore' ? 'ok' : 'no']} data-tip={r.signer ? `signed by ${r.signer}${r.signedAt ? ` · logged ${r.signedAt}` : ''}` : r.verification === 'unsigned-dev' ? 'development feed: accepted unsigned only by a dev registry' : 'no signature'}>
+                  <Icon id={r.verification === 'sigstore' ? 'i-sig' : 'i-unsig'} size="s" />
+                  {sigText(r)}
+                </span>
+              </td>
+              <td class="wrap">
+                <span class={`vt c-${pub}`}>{pub}</span>
+                {eff !== pub && (
+                  <>
+                    {' '}
+                    <span class="mute">→</span> <span class={`vt c-${eff}`}>{eff}</span>
+                  </>
+                )}
+                {r.adjustments.map((a) => (
+                  <span class="chip sm caution" style="margin-left:4px">{ADJUSTMENT_TEXT[a] ?? a}</span>
+                ))}
+              </td>
+              <td class="num mono">{report ? report.verdict.score : '—'}</td>
+              <td>
+                {counts.state ? (
+                  <span class={`vt c-${counts.state}`}>
+                    {counts.capped ? '≤' : ''}
+                    {counts.state}
+                  </span>
+                ) : (
+                  <span class="mute">not counted</span>
+                )}
+              </td>
+              <td class="wrap critcol">{r.provider === 'marketplace' ? <span class="mute">—</span> : <Criteria criteria={r.criteria} />}</td>
+              <td>
+                <span class="mono">{sha7(r.commit)}</span>
+                {r.provider === 'marketplace' && reviewedCommit && r.commit ? (
+                  r.commit === reviewedCommit ? (
+                    <span class="c-safe tip" data-tip="marketplace-validated commit = reviewed commit"> =</span>
+                  ) : (
+                    <span class="c-caution tip" data-tip="marketplace-validated commit ≠ reviewed commit"> ≠</span>
+                  )
+                ) : null}
+                {r.tree && (
+                  <span class="mute tip" data-tip={`tree ${r.tree}`}>
+                    {' '}
+                    <Icon id="i-tree" size="s" /> {sha7(r.tree)}
+                  </span>
+                )}
+              </td>
+              <td class="mono mute">{day(r.timeReviewed)}</td>
+            </tr>
+          );
+        })
+      }
+    </tbody>
+  </table>
+</div>

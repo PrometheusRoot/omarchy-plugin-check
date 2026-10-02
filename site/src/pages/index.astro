@@ -1,0 +1,144 @@
+---
+import Icon from '../components/Icon.astro';
+import Base from '../layouts/Base.astro';
+import { decodeIndex } from '../lib/compact';
+import { load, siteIndex } from '../lib/data';
+import { STATE_ICON } from '../lib/model';
+import { DEFAULT_QUERY, PAGE_SIZE, run } from '../lib/query';
+import { rowHtml } from '../lib/render';
+
+const base = import.meta.env.BASE_URL;
+const { meta } = load();
+const idx = siteIndex();
+const rows = decodeIndex(idx);
+const first = run(rows, DEFAULT_QUERY);
+const count = (key: 'cat' | 'kind') => {
+  const m = new Map<string, number>();
+  for (const r of rows) if (r[key]) m.set(r[key], (m.get(r[key]) ?? 0) + 1);
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+};
+const cats = count('cat');
+const kinds = count('kind');
+const reviewed = rows.filter((r) => r.commit).length;
+const filters = ['all', 'safe', 'caution', 'risky', 'blocked', 'unreviewed', 'retired'] as const;
+const sorts = [
+  { key: 'name', label: 'plugin', cls: '' },
+  { key: 'risk', label: 'risk', cls: '' },
+  { key: '', label: 'caps', cls: '' },
+  { key: '', label: 'areas', cls: '' },
+  { key: '', label: 'providers', cls: 'pvh' },
+  { key: 'stars', label: 'stars', cls: '' },
+  { key: 'reviewed', label: 'review', cls: '' },
+] as const;
+const sortOptions = [
+  ['rank', 'rank'],
+  ['verdict', 'worst first'],
+  ['risk', 'risk'],
+  ['stars', 'stars'],
+  ['reviewed', 'last review'],
+  ['name', 'name'],
+] as const;
+const catalogAt = (meta.catalogGeneratedAt ?? meta.generatedAt).replace('T', ' ').slice(0, 16);
+---
+<Base
+  title="omarchy-plugin-check"
+  description="Commit-bound security reviews for every Omarchy plugin: per-provider verdicts, the combined verdict, capabilities and evidence."
+  nav="index"
+>
+  <h1 class="sr">omarchy plugin reviews</h1>
+  <section aria-label="plugin index" id="index" data-base={base} data-total={rows.length}>
+    <div class="toolbar">
+      <label class="search">
+        <Icon id="i-search" size="m" />
+        <span class="sr">search plugins</span>
+        <input id="q" type="search" placeholder="search name, id, repo, host" autocomplete="off" spellcheck="false" />
+      </label>
+      <label>
+        <span class="sr">category</span>
+        <select id="cat" class="sel">
+          <option value="">all categories</option>
+          {cats.map(([c, n]) => <option value={c}>{c.toLowerCase()} ({n})</option>)}
+        </select>
+      </label>
+      <label>
+        <span class="sr">kind</span>
+        <select id="kind" class="sel">
+          <option value="">all kinds</option>
+          {kinds.map(([k, n]) => <option value={k}>{k.toLowerCase()} ({n})</option>)}
+        </select>
+      </label>
+      <label>
+        <span class="sr">sort</span>
+        <select id="sort" class="sel">
+          {sortOptions.map(([k, label]) => <option value={k}>sort: {label}</option>)}
+        </select>
+      </label>
+    </div>
+    <div class="filters" role="group" aria-label="filter by combined verdict" id="filters">
+      <span class="lbl">verdict</span>
+      {
+        filters.map((f) => (
+          <button class:list={['chip', f !== 'all' && f]} type="button" data-f={f} aria-pressed={f === 'all' ? 'true' : 'false'}>
+            {f !== 'all' && <Icon id={STATE_ICON[f]} size="s" />}
+            {f} <span class="num" data-count={f}>{first.counts[f] ?? 0}</span>
+          </button>
+        ))
+      }
+      <span class="lbl">report</span>
+      <button class="chip brand" type="button" id="reviewedOnly" aria-pressed="false">
+        <Icon id="i-file" size="s" />has report <span class="num">{reviewed}</span>
+      </button>
+    </div>
+    <p class="sr" aria-live="polite" id="status"></p>
+    <div class="list" id="list" style="margin-top:14px">
+      <div class="hd">
+        <span class="glyph lbl" aria-hidden="true"></span>
+        {
+          sorts.map((s) =>
+            s.key ? (
+              <span class:list={['lbl', s.cls]}>
+                <button class="lbl" type="button" data-sort={s.key} aria-pressed="false">
+                  {s.label}
+                </button>
+              </span>
+            ) : (
+              <span class:list={['lbl', s.cls]}>{s.label}</span>
+            ),
+          )
+        }
+      </div>
+      <div id="rows"><Fragment set:html={first.rows.map((r) => rowHtml(base, r)).join('')} /></div>
+    </div>
+    <nav class="pager" aria-label="pages">
+      <span class="catnote" id="range">1–{Math.min(PAGE_SIZE, first.total)} of {first.total.toLocaleString('en-US')} · sorted by rank</span>
+      <span class="pg">
+        <button class="btn sq" type="button" id="prev" aria-label="previous page" disabled><Icon id="i-chev-l" size="s" /></button>
+        <span class="catnote num" id="pageno">1 / {first.pages}</span>
+        <button class="btn sq" type="button" id="next" aria-label="next page" disabled={first.pages < 2}><Icon id="i-chev-r" size="s" /></button>
+      </span>
+    </nav>
+    <div class="row" style="justify-content:space-between;margin-top:8px">
+      <span class="catnote">
+        <Icon id="i-ext" size="s" />catalog <a href="https://plugins.omarchy.org/" rel="noopener">plugins.omarchy.org</a> · {meta.pluginCount.toLocaleString('en-US')} plugins with a provider row · {rows.length.toLocaleString('en-US')} listed · generated {catalogAt}Z
+      </span>
+      <span class="catnote">combined = worst of core + verified · community and unsigned providers count as ≤caution</span>
+    </div>
+    <div class="legend" aria-label="legend">
+      <span><Icon id="i-safe" size="s" class="c-safe" />safe</span>
+      <span><Icon id="i-caution" size="s" class="c-caution" />caution</span>
+      <span><Icon id="i-risky" size="s" class="c-risky" />risky</span>
+      <span><Icon id="i-blocked" size="s" class="c-blocked" />blocked</span>
+      <span><Icon id="i-unreviewed" size="s" class="c-unreviewed" />unreviewed</span>
+      <span><Icon id="i-stale" size="s" class="c-stale" />stale (upstream moved)</span>
+      <span><Icon id="i-retired" size="s" class="c-retired" />retired</span>
+      <span><Icon id="i-unlisted" size="s" class="c-unlisted" />unlisted</span>
+      <span><Icon id="i-flag" size="s" class="c-risky" />contested</span>
+      <span><Icon id="i-sig" size="s" class="sig ok" />signature verified</span>
+      <span><Icon id="i-unsig" size="s" class="sig no" />unsigned</span>
+      <span>≤ capped at caution</span>
+    </div>
+  </section>
+  <script>
+    import '../client/index';
+  </script>
+</Base>

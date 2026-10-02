@@ -1,0 +1,167 @@
+---
+import Base from '../layouts/Base.astro';
+import { load } from '../lib/data';
+
+const base = import.meta.env.BASE_URL;
+const { meta, docs } = load();
+const origin = new URL(base, Astro.site).href;
+const signers = meta.registry.dev ? 'allowed_signers.dev' : 'allowed_signers';
+const sample = docs.find((d) => d.providers.some((r) => r.statement)) ?? docs[0];
+const stmt = sample?.providers.find((r) => r.statement)?.statement ?? null;
+const endpoints = [
+  [
+    'api/v1/meta.json',
+    'api-meta',
+    'registry summary, providers (feed version, expiry, status), counts, rejected rows',
+  ],
+  [
+    'api/v1/index.json',
+    'api-index',
+    'one row per plugin: combined verdict, basis, contested, per-provider verdicts',
+  ],
+  ['api/v1/by-repo.json', 'api-by-repo', 'repository (and previous names) → plugin ids'],
+  [
+    'api/v1/plugins/<id>.json',
+    'api-plugin',
+    'every provider row + combined; listing, weekly activity, embedded reports',
+  ],
+  ['api/v1/plugins/<id>/<provider>/<commit>.json', 'statement', 'the verified in-toto statement (immutable)'],
+  ['store.json + .sig', 'store', 'compact signed snapshot: the CLI contract'],
+  [
+    'store-manifest.json + .sig',
+    'store-manifest',
+    'signed client bundle manifest: sha256 + size of the files below',
+  ],
+  [
+    'store-home.json · store-search.json · store-details.json',
+    'store-home / store-search / store-details',
+    'the store app bundle',
+  ],
+  ['providers.json + .sig', 'providers', 'the provider registry (when published with the snapshot)'],
+] as const;
+const schemas = [
+  'api-meta',
+  'api-index',
+  'api-by-repo',
+  'api-plugin',
+  'statement',
+  'predicate',
+  'feed-index',
+  'providers',
+  'store',
+  'store-manifest',
+  'store-home',
+  'store-search',
+  'store-details',
+  'common',
+];
+---
+<Base title="api" description="The public static JSON API: endpoints, schemas, and how to verify snapshot and attestation signatures." nav="api">
+  <div class="rhead">
+    <div class="t"><h1>api</h1></div>
+    <span class="mute mono" style="font-size:12px">static json · v1 · generated {meta.generatedAt.slice(0, 16).replace('T', ' ')}Z</span>
+  </div>
+  <div class="docgrid">
+    <div class="prose">
+      <p>
+        Everything on this site is built from static JSON that anyone can fetch, mirror and verify. No keys, no rate
+        limits, no scan-on-demand. Paths are relative to <code>{origin}</code>.
+      </p>
+      <section>
+        <h2>endpoints</h2>
+        <div class="tblwrap">
+          <table class="tbl endpoints">
+            <thead><tr><th scope="col">path</th><th scope="col">schema</th><th scope="col">content</th></tr></thead>
+            <tbody>
+              {
+                endpoints.map(([p, s, d]) => (
+                  <tr>
+                    <td class="mono">{p.includes('<') || p.includes(' ') ? p : <a href={`${base}${p}`}>{p}</a>}</td>
+                    <td class="mono">{s}</td>
+                    <td>{d}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="mute" style="font-size:13px">
+          Example: <a href={`${base}api/v1/plugins/${sample?.id}.json`}><code>api/v1/plugins/{sample?.id}.json</code></a>
+          {stmt && (<>, statement <a href={`${base}api/v1/${stmt}`}><code>api/v1/{stmt}</code></a></>)}.
+          <code>data/plugins.json</code> is this site's own compact search index, not a stable API.
+        </p>
+      </section>
+      <section>
+        <h2>schemas</h2>
+        <p>
+          JSON Schema 2020-12, served at their <code>$id</code>:
+          {schemas.map((s, i) => (<>{i ? ' · ' : ' '}<a href={`${base}spec/v1/${s}.schema.json`}><code>{s}</code></a></>))}.
+          The protocol (attestation, feed, registry, merge rules) is <code>spec/PROTOCOL.md</code> in the repository.
+        </p>
+      </section>
+      <section>
+        <h2>verify the snapshot</h2>
+        <p>
+          <code>store.json</code> and <code>store-manifest.json</code> carry detached SSH signatures (ed25519,
+          namespace <code>omarchy-plugin-check-snapshot</code>). Verify before trusting any verdict, then reject an
+          expired snapshot or a <code>version</code> lower than the last one you accepted:
+        </p>
+        <pre><code>curl -fsSLO {origin}store.json -O {origin}store.json.sig
+curl -fsSL {origin}keys/{signers} -o allowed_signers
+ssh-keygen -Y verify -f allowed_signers -I omarchy-plugin-check \
+  -n omarchy-plugin-check-snapshot -s store.json.sig &lt; store.json
+jq -r '.expires, .version, .dev' store.json</code></pre>
+        <p>
+          The store bundle: verify <code>store-manifest.json.sig</code> the same way, then check that the
+          <code>sha256</code> and <code>size</code> of every listed file match (<code>sha256sum</code>), and use a
+          plugin's <code>api/v1/plugins/&lt;id&gt;.json</code> only if its sha256 is the one
+          <code>store-details.json</code> lists.
+        </p>
+        {meta.registry.dev && (
+          <p class="c-caution" style="font-size:13px">
+            This deployment serves a development snapshot (<code>"dev": true</code>) signed with the development key
+            <code>keys/dev-snapshot.pub</code>; clients accept it only when asked to (<code>OPC_DEV_KEYS=1</code>).
+          </p>
+        )}
+      </section>
+      <section>
+        <h2>verify an attestation</h2>
+        <p>
+          Each review is an in-toto statement in a DSSE envelope inside a Sigstore bundle, signed keyless in the
+          provider's GitHub Actions workflow. Fetch the bundle from the provider's feed
+          (<code>&lt;feedUrl&gt;/feed/v1/statements/&lt;id&gt;/&lt;commit&gt;.sigstore.json</code>; identities on the
+          <a href={`${base}providers/`}>providers</a> page) and check it against the exact workflow identity:
+        </p>
+        <pre><code>cosign verify-blob-attestation --new-bundle-format \
+  --bundle &lt;commit&gt;.sigstore.json \
+  --certificate-identity '&lt;exact workflow SAN from the registry&gt;' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --type {meta.predicateType} \
+  --check-claims=false        # the subject is a git commit, not a file</code></pre>
+        <p>
+          Then compare the statement's subject with what you install: <code>subject[0].name</code> must be
+          <code>git+&lt;the marketplace repository&gt;</code> and <code>subject[0].digest.gitCommit</code> (or
+          <code>gitTree</code>) your checkout's <code>git rev-parse HEAD</code> (<code>HEAD^&#123;tree&#125;</code>).
+          The signing time (Rekor) must fall inside the provider's validity window.
+        </p>
+      </section>
+    </div>
+    <aside class="raside" aria-label="quick links">
+      <div class="card">
+        <span class="lbl">quick links</span>
+        <a href={`${base}api/v1/meta.json`}>meta.json</a>
+        <a href={`${base}api/v1/index.json`}>index.json</a>
+        <a href={`${base}api/v1/by-repo.json`}>by-repo.json</a>
+        <a href={`${base}spec/v1/api-plugin.schema.json`}>api-plugin.schema.json</a>
+      </div>
+      <div class="card">
+        <span class="lbl">numbers</span>
+        <dl class="kv">
+          <dt>plugins</dt><dd class="mono">{docs.length.toLocaleString('en-US')}</dd>
+          <dt>providers</dt><dd class="mono">{meta.providers.length}</dd>
+          <dt>registry</dt><dd class="mono">v{meta.registry.version}{meta.registry.dev ? ' · dev' : ''}</dd>
+        </dl>
+      </div>
+    </aside>
+  </div>
+</Base>

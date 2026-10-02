@@ -1,0 +1,69 @@
+---
+import Icon from '../components/Icon.astro';
+import Base from '../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+<Base title="about" description="What omarchy-plugin-check is, how its verdicts are trusted, and how to install the checker." nav="about">
+  <div class="rhead"><div class="t"><h1>about</h1></div><span class="mute mono" style="font-size:12px">independent community project · not affiliated with omarchy</span></div>
+  <div class="docgrid">
+    <div class="prose">
+      <section>
+        <h2>what it is</h2>
+        <p>
+          Omarchy plugins run unsandboxed inside <code>omarchy-shell</code> (the same process as the lock screen and
+          the polkit agent), and <code>omarchy plugin add</code> clones whatever upstream HEAD is today. A review only
+          means something for the commit it reviewed. This site publishes commit-bound reviews of every plugin listed on
+          <a href="https://plugins.omarchy.org/" rel="noopener">plugins.omarchy.org</a>: per-provider verdicts, the
+          combined verdict, what the plugin can do, and file:line evidence.
+        </p>
+      </section>
+      <section>
+        <h2>trust model</h2>
+        <ul>
+          <li><b>Scanners are ground truth.</b> Static tools decide; they alone can block. The AI reviewer is escalate-only: it may add findings and raise a verdict one level, never lower one, never block, never clear a hard fail.</li>
+          <li><b>Providers sign what they publish.</b> Each review is an in-toto statement signed keyless with Sigstore in the provider's own CI; the registry pins each provider's workflow identity and validity window.</li>
+          <li><b>Combined = worst of trusted providers.</b> Core and verified providers count fully; community providers and the unsigned marketplace baseline are shown but count as at most caution, and never make a plugin safe.</li>
+          <li><b>The marketplace owns identity.</b> Plugin ids, names, categories and repositories come only from plugins.omarchy.org; anything else is <i>unlisted</i> and never scanned.</li>
+          <li><b>Coarse by design.</b> Reports show categories, severities and evidence locations, never rule identifiers, weights or formulas, so the scanner is no free evasion oracle.</li>
+          <li><b>One signed snapshot.</b> Clients verify <code>store.json</code> (or the client bundle manifest) with <code>ssh-keygen -Y verify</code> before using any verdict; expired or rolled-back snapshots are refused.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>states</h2>
+        <ul>
+          <li><span class="c-safe">safe</span> / <span class="c-caution">caution</span> / <span class="c-risky">risky</span>: the trusted combined verdict for the reviewed commit.</li>
+          <li><span class="c-blocked">blocked</span>: a trusted provider found blocking evidence at a file:line.</li>
+          <li><span class="mute">unreviewed</span>: no trusted review yet (only the unsigned baseline, or nothing).</li>
+          <li><span class="c-stale">stale</span>: the commit you run differs from the reviewed one, in commit and tree.</li>
+          <li><span class="mute">unlisted</span>: not on plugins.omarchy.org. <span class="mute">retired</span>: removed from it; no verdict.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>install the checker</h2>
+        <p>The checker is itself an Omarchy plugin: a CLI that gates <code>omarchy plugin add</code>, a bar shield and a panel.</p>
+        <pre><code>omarchy plugin add https://github.com/PrometheusRoot/omarchy-plugin-check-plugin --enable
+~/.config/omarchy/plugins/io.github.prometheusroot.plugin-check/bin/omarchy-plugin-check setup
+omarchy-plugin-check update
+omarchy-plugin-check --add --pin &lt;plugin id or git url&gt;</code></pre>
+        <p class="mute" style="font-size:13px">
+          <code>--add</code> refuses blocked and retired plugins, asks before risky, caution, unreviewed, stale or
+          unlisted ones, and <code>--pin</code> checks out the reviewed commit and verifies its tree. Until the production
+          signing key is published only development snapshots exist.
+        </p>
+      </section>
+    </div>
+    <aside class="raside" aria-label="links">
+      <div class="card">
+        <span class="lbl">links</span>
+        <a href={`${base}providers/`}><Icon id="i-prov" size="s" /> providers</a>
+        <a href={`${base}api/`}><Icon id="i-api" size="s" /> static api + verification</a>
+        <a href="https://plugins.omarchy.org/" rel="noopener"><Icon id="i-ext" size="s" /> plugins.omarchy.org</a>
+      </div>
+      <div class="card">
+        <span class="lbl">not affiliated</span>
+        <p style="margin:0;font-size:13px">An independent community project. Not made, endorsed or reviewed by Omarchy or 37signals. Verdicts are opinions about a specific commit, not guarantees.</p>
+      </div>
+    </aside>
+  </div>
+</Base>

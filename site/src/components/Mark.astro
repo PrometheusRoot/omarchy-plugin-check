@@ -1,0 +1,25 @@
+---
+// The project's own pixel shield (11x12 grid). Never Omarchy's logo: this is an independent tool.
+interface Props {
+  class?: string;
+}
+const { class: cls = 'mark' } = Astro.props;
+const ROWS = [
+  '.XXXXXXXXX.',
+  'X.........X',
+  'X.........X',
+  'X.......X.X',
+  'X......X..X',
+  'X.X...X...X',
+  'X..X.X....X',
+  'X...X.....X',
+  '.X.......X.',
+  '..X.....X..',
+  '...X...X...',
+  '....XXX....',
+];
+const cells = ROWS.flatMap((row, y) => [...row].flatMap((c, x) => (c === 'X' ? [{ x, y }] : [])));
+---
+<svg class={cls} viewBox="0 0 11 12" aria-hidden="true" focusable="false">
+  {cells.map(({ x, y }) => <rect x={x} y={y} width="1" height="1" fill="var(--brand)" />)}
+</svg>
