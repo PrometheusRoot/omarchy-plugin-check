@@ -6,3 +6,4 @@ just        1.58.0   https://github.com/casey/just/releases/download/1.58.0/just
 prek        0.5.4    https://github.com/j178/prek/releases/download/v0.5.4/prek-x86_64-unknown-linux-musl.tar.gz                  805632185f4539ca2eb0fd1b3b52ea842cecbc4ba1e749be430df948621353b0
 shfmt       3.14.1   https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64                             76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
 actionlint  1.7.12   https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz           8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+packer      1.16.1   https://releases.hashicorp.com/packer/1.16.1/packer_1.16.1_linux_amd64.zip                                af38a9e93e4ed1b9ca68206ae969c64c300c82a3dde46a780dfa629f0867f651

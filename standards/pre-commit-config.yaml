@@ -40,6 +40,12 @@ repos:
         entry: scripts/tool shellcheck -x
         language: system
         types: [shell]
+      - id: packer-fmt
+        name: packer fmt + syntax
+        entry: bash -c 'scripts/tool packer fmt -check -diff orchestrator/packer && scripts/tool packer validate -syntax-only orchestrator/packer'
+        language: system
+        files: ^orchestrator/packer/.*\.pkr\.hcl$
+        pass_filenames: false
       - id: actionlint
         name: actionlint
         entry: scripts/tool actionlint
