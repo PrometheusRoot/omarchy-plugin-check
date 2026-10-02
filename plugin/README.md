@@ -18,9 +18,12 @@ plugin compares what you install (or have installed) with what was reviewed, com
 - **`omarchy-plugin-check status [--json]`**: every plugin in `~/.config/omarchy/plugins` with
   its state: safe, caution, risky, blocked, unreviewed, stale, unlisted or retired. Writes
   `~/.cache/omarchy-plugin-check/status.json` for the panel. Never uses the network.
-- **`omarchy-plugin-check update [<url|path>]`**: fetch and verify the signed snapshot
-  (`ssh-keygen -Y verify`; expired or rolled-back snapshots are refused, the last accepted one
-  is kept). Source: the argument, `$OPC_SNAPSHOT_URL`, or the project's published URL.
+- **`omarchy-plugin-check update [<url|path>]`**: fetch and verify the signed client bundle
+  (`store-manifest.json` + `.sig`, then sha256 and size of every file it lists, `store.json`
+  included) or a bare signed `store.json`; expired or rolled-back snapshots are refused and the
+  last accepted one is kept. Installs into `~/.cache/omarchy-plugin-check/`, where the store app
+  reads it too. Source: the argument (manifest, `store.json` or their directory; https, a path or
+  `file://`), `$OPC_SNAPSHOT_URL`, or the project's published URL.
 - **`omarchy-plugin-check setup [--uninstall]`**: links the CLI into `~/.local/bin` and adds
   *Setup › Plugins › Check Plugin* and *Audit Plugins* to
   `~/.config/omarchy/extensions/omarchy-menu.jsonc` (a marked block; a backup is kept; your
