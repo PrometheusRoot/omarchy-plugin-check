@@ -59,6 +59,17 @@ class Marketplace:
                 out[old] = list(out[new])
         return {k: sorted(v) for k, v in sorted(out.items())}
 
+    def former(self, key: str) -> list[str]:
+        """Previous repository keys that migrate to `key`, sorted.
+
+        A previous name that is some plugin's current repository is left out: the current listing
+        owns it (a freed name can be re-registered by someone else).
+        """
+        current = {p.repo_key for p in self.plugins.values() if p.repo_key}
+        return sorted(
+            old for old in self.migrations if old != key and old not in current and self.canonical(old) == key
+        )
+
 
 def _state(raw: Mapping[str, Any], retired: frozenset[str]) -> State:
     if raw["id"] in retired:

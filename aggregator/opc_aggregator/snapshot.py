@@ -14,7 +14,7 @@ from opc_spec.jsonv import arr, integer, obj, strs, text
 from opc_spec.marketplace import manifest_dir
 from opc_spec.vocab import STORE_KIND
 
-from opc_aggregator.merge import effective
+from opc_aggregator.merge import decided_tree, effective
 from opc_aggregator.model import Combined, Row, iso
 
 if TYPE_CHECKING:
@@ -44,6 +44,8 @@ GH_KEYS = (
 )
 SHELF_KEYS = ("top", "trending", "new", "updated", "safePicks")
 GALLERY_MAX = 8
+FORMER_MAX = 20
+GITHUB = "https://github.com/"
 WEEKS = 52
 REQUIRED = frozenset({"id", "name", "verdict"})
 
@@ -134,8 +136,9 @@ def _risk(row: Row) -> int | None:
 def _verdict(rows: Sequence[Row], combined: Combined | None) -> dict[str, Any]:
     """Compact verdict; optional keys only when they carry information.
 
-    `contested` only if true; `commit` only for a trusted basis at one commit; `criteria` and
-    `risk` from the deciding trusted row when it has them.
+    `contested` only if true; `commit` only for a trusted basis at one commit, `tree` with it when
+    the trusted rows of that commit attest one; `criteria` and `risk` from the deciding trusted row
+    when it has them.
     """
     if combined is None:
         return {"combined": "unknown", "basis": "none", "providers": {}}
@@ -148,6 +151,9 @@ def _verdict(rows: Sequence[Row], combined: Combined | None) -> dict[str, Any]:
         out["contested"] = True
     if combined.basis == "trusted" and len(combined.commits) == 1:
         out["commit"] = combined.commits[0]
+        tree = decided_tree(rows, combined)
+        if tree is not None:
+            out["tree"] = tree
     row = deciding_row(rows, combined)
     if row is not None and row.criteria is not None:
         crit = obj(row.criteria)
@@ -158,11 +164,19 @@ def _verdict(rows: Sequence[Row], combined: Combined | None) -> dict[str, Any]:
     return out
 
 
+def _former(market: Marketplace | None, plugin: Plugin) -> list[str]:
+    """Previous repository URLs of the plugin (registry repositoryMigrations + repositoryIdentity)."""
+    if market is None or not plugin.repo_key:
+        return []
+    return [GITHUB + k for k in market.former(plugin.repo_key)][:FORMER_MAX]
+
+
 def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent sources
     plugin: Plugin,
     rows: Sequence[Row],
     combined: Combined | None,
     *,
+    market: Marketplace | None = None,
     repo_stats: Mapping[str, Any] | None,
     engagement: Mapping[str, Any] | None,
     ranked: Mapping[str, Any] | None,
@@ -181,6 +195,7 @@ def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent source
         "kind": _str(raw, "kind", 64),
         "tags": [t[:64] for t in strs(raw.get("tags"))][:20],
         "repo": plugin.repo,
+        "formerRepos": _former(market, plugin),
         "state": plugin.state,
         "verif": _str(raw, "verificationStatus", 32),
         "listed": _when(raw, "listedAt"),
@@ -228,6 +243,7 @@ def assemble(  # noqa: PLR0913  # why: the snapshot is a join of independent inp
             p,
             rows.get(p.id, ()),
             combined.get(p.id),
+            market=market,
             repo_stats=repos.get(p.repo_key) if p.repo_key else None,
             engagement=engagement.get(p.id),
             ranked=ranked.get(p.id),

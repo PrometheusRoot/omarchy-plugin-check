@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from opc_spec import ids
 from opc_spec.vocab import TRUSTED_TIERS, Verdict, cap, severity_rank, worst
 
 from opc_aggregator.model import Combined, Effective, Row
@@ -88,3 +89,24 @@ def combine(rows: Sequence[Row]) -> Combined:
         reasons = ["no provider has a decided verdict"]
     commits = tuple(dict.fromkeys(r.commit for r in decided if r.commit))
     return Combined(verdict, basis, _contested(trusted, capped), commits, tuple(reasons[:20]))
+
+
+def decided_tree(rows: Sequence[Row], combined: Combined) -> str | None:
+    """The reviewed git tree of the commit that decided `combined`, or None.
+
+    Only for a trusted basis at a single commit, and only when every trusted row of that commit
+    that names a tree (the statement's `subject.digest.gitTree`) names the same one: the tree lets
+    a client accept a re-signed or rebased commit with identical content (ADR-0034).
+    """
+    if combined.basis != "trusted" or len(combined.commits) != 1:
+        return None
+    commit = combined.commits[0]
+    trees = {
+        r.tree
+        for r in rows
+        if r.tier in TRUSTED_TIERS
+        and r.commit == commit
+        and severity_rank(r.verdict) >= 0
+        and ids.is_sha1(r.tree)
+    }
+    return trees.pop() if len(trees) == 1 else None

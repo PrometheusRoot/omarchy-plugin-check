@@ -7,7 +7,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from opc_spec.vocab import TRUSTED_TIERS, VERDICTS, severity_rank
 
-from opc_aggregator.merge import combine, effective, latest_per_provider
+from opc_aggregator.merge import combine, decided_tree, effective, latest_per_provider
 
 from .helpers import C1, C3, T0, row
 
@@ -108,3 +108,25 @@ def test_adding_rows_never_lowers_severity(a, b):
 def test_order_independent(rows):
     c1, c2 = combine(rows), combine(list(reversed(rows)))
     assert (c1.verdict, c1.basis, c1.contested) == (c2.verdict, c2.basis, c2.contested)
+
+
+T1, T2 = "a" * 40, "b" * 40
+
+
+def test_decided_tree():
+    """The tree of the single trusted commit; absent when it is ambiguous or not attested."""
+    one = [row("p", "core", "safe", tree=T1), row("m", "unsigned", "safe", tree=T2)]
+    assert decided_tree(one, combine(one)) == T1  # untrusted rows never supply it
+    agree = [row("p", "core", tree=T1), row("q", "verified", "caution", tree=T1)]
+    assert decided_tree(agree, combine(agree)) == T1
+    disagree = [row("p", "core", tree=T1), row("q", "verified", tree=T2)]
+    assert decided_tree(disagree, combine(disagree)) is None
+    partial = [row("p", "core", tree=T1), row("q", "verified")]
+    assert decided_tree(partial, combine(partial)) == T1
+    undecided = [row("p", "core", tree=T1), row("q", "verified", "unknown", tree=T2)]
+    assert decided_tree(undecided, combine(undecided)) == T1
+    assert decided_tree([row("p", "core", tree="nope")], combine([row("p", "core")])) is None
+    two = [row("p", "core", tree=T1), row("q", "core", commit=C3, tree=T2)]
+    assert decided_tree(two, combine(two)) is None
+    untrusted = [row("m", "unsigned", "caution", tree=T1)]
+    assert decided_tree(untrusted, combine(untrusted)) is None

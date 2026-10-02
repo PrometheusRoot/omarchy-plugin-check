@@ -69,6 +69,9 @@ def test_example_feed_end_to_end(tmp_path):
     assert schemas.errors(doc, "api-plugin") == []
     assert doc["providers"][0]["verification"] == "unsigned-dev"
     assert doc["providers"][1]["effectiveVerdict"] == "safe"
+    assert doc["combined"]["tree"] == "2" * 40
+    suite = json.loads((out / "plugins" / "example.suite-a.json").read_text())
+    assert "tree" not in suite["combined"]
     stmt_path = out / doc["providers"][0]["statement"]
     assert json.loads(stmt_path.read_text())["predicate"]["provider"]["id"] == "example"
     meta = json.loads((out / "meta.json").read_text())
@@ -249,10 +252,16 @@ def test_snapshot_assemble(tmp_path):
         "w": 1600,
         "h": 900,
     }
+    assert clock["formerRepos"] == [
+        "https://github.com/example/ancient-clock",
+        "https://github.com/example/clock-old",
+    ]
+    assert "formerRepos" not in by["example.suite-a"]
     assert clock["verdict"] == {
         "combined": "caution",
         "basis": "trusted",
         "commit": C1,
+        "tree": "2" * 40,
         "providers": {"example": "caution", "marketplace": "safe"},
         "criteria": {
             "checked": [
@@ -428,3 +437,4 @@ def test_snapshot_row_compaction_edges():
     assert row["listed"] == "2026-09-01"
     assert "install" not in row  # the default command is implied
     assert row["verdict"] == {"combined": "risky", "basis": "trusted", "providers": {}, "contested": True}
+    assert "formerRepos" not in row  # no marketplace given

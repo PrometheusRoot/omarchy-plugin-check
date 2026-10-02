@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from opc_spec import ids
 from opc_spec.vocab import VERDICTS
 
-from opc_aggregator.merge import effective
+from opc_aggregator.merge import decided_tree, effective
 from opc_aggregator.model import Combined, Row, iso
 
 if TYPE_CHECKING:
@@ -81,9 +81,14 @@ def plugin_doc(
         "repo": plugin.repo,
         "listingState": plugin.state,
         "marketplaceUrl": ids.marketplace_url(plugin.id),
-        "combined": combined_doc(combined),
+        "combined": combined_doc(combined) | _tree(rows, combined),
         "providers": [row_doc(r) for r in rows],
     } | extra
+
+
+def _tree(rows: Sequence[Row], combined: Combined) -> dict[str, str]:
+    tree = decided_tree(rows, combined)
+    return {"tree": tree} if tree else {}
 
 
 def quality_of(rows: Sequence[Row]) -> int | None:

@@ -99,8 +99,9 @@ The marketplace baseline (registry.json `automatedSecurityBaseline.outcome`) map
 
 The aggregator publishes one compact [`store.json`](schemas/store.schema.json) (marketplace
 metadata, GitHub activity, ranking, shelves, per-provider verdicts and the combined verdict; per
-plugin also the deciding trusted row's `verdict.criteria` and `verdict.risk`, and the marketplace
-`ini`/`accent`) with a detached SSH signature (`store.json.sig`, namespace
+plugin also the deciding trusted row's `verdict.criteria` and `verdict.risk`, the marketplace
+`ini`/`accent`, the reviewed `verdict.commit` with its `verdict.tree`, and `formerRepos`) with a
+detached SSH signature (`store.json.sig`, namespace
 `omarchy-plugin-check-snapshot`, ed25519). It is the CLI's contract. Clients verify it offline
 before use (ADR-0013):
 
@@ -112,6 +113,14 @@ which runs `ssh-keygen -Y verify -f allowed_signers -I omarchy-plugin-check -n
 omarchy-plugin-check-snapshot -s store.json.sig < store.json` and then rejects an expired snapshot
 or a `version` lower than the last accepted one. `spec/keys/dev-snapshot.pub` is a **development
 key only**; snapshots signed with it carry `"dev": true`.
+
+Identity fields a client binds an installed checkout with (ADR-0034):
+
+| Field | Present when | Meaning |
+|---|---|---|
+| `verdict.commit` | trusted basis, every decided row at one commit | the reviewed commit |
+| `verdict.tree` | with `commit`, when the trusted rows of that commit name one `subject.digest.gitTree` | its tree: `HEAD^{tree}` equal to it is the reviewed content (re-signed or rebased commit) |
+| `formerRepos[]` | the registry has `repositoryMigrations` / `repositoryIdentity.previousRepositories` for the listing | previous repository URLs (lower-cased); a checkout whose `origin` is one of them is this listing, moved. A name that is another listing's current repository is never included |
 
 ## 7. The store client bundle
 

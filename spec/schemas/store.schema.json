@@ -283,6 +283,15 @@
         "repo": {
           "type": "string"
         },
+        "formerRepos": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/repoUrl"
+          },
+          "description": "Previous repository URLs of this listing (marketplace registry repositoryMigrations + repositoryIdentity.previousRepositories, lower-cased). A checkout whose origin is one of them is this plugin, moved; a name that is another listing's current repository is never listed here (ADR-0034)."
+        },
         "path": {
           "type": "string",
           "maxLength": 512,
@@ -503,6 +512,10 @@
             "commit": {
               "$ref": "common.schema.json#/$defs/sha1",
               "description": "Present only for a trusted basis whose rows all reviewed this commit (the CLI compares it with the installed HEAD)."
+            },
+            "tree": {
+              "$ref": "common.schema.json#/$defs/sha1",
+              "description": "The git tree of `commit`, from the trusted statements' subject gitTree; present only with `commit` and when those rows agree. Clients accept a checkout whose HEAD^{tree} equals it as the reviewed content (ADR-0034)."
             },
             "providers": {
               "type": "object",

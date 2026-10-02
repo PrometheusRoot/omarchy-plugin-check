@@ -72,3 +72,12 @@ def test_no_registry_and_helpers():
     assert marketplace.key_of("https://github.com/O/R") == "o/r"
     assert marketplace.manifest_dir({"manifestPath": "plugins/x/manifest.json"}) == "plugins/x"
     assert marketplace.manifest_dir({}) == ""
+
+
+def test_former_repositories():
+    m = marketplace.parse(CATALOG, REGISTRY)
+    assert m.former("a/clock") == ["a/ancient", "a/clock-old"]
+    assert m.former("z/z") == []
+    # A previous name that is now another listing's repository belongs to that listing.
+    m.migrations["old/thing"] = "a/clock"
+    assert "old/thing" not in m.former("a/clock")
