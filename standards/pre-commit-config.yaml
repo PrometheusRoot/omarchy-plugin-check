@@ -1,6 +1,5 @@
 # prek / pre-commit hooks (ADR-0015). Fast checks only (< 5 s); types + tests run in `just check` / CI.
 # Install: `prek install`. Run all: `just lint`. Tools resolve via scripts/tool (.venv/bin, .tools/bin).
-# Ratchet: zizmor joins with SHA-pinned workflows in the CI PR (docs/ENGINEERING.md#ratchets).
 exclude: ^scanner/fixtures/plugins/|^scanner/tests/data/
 
 repos:
@@ -49,6 +48,11 @@ repos:
       - id: actionlint
         name: actionlint
         entry: scripts/tool actionlint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+      - id: zizmor
+        name: zizmor (workflow security audit)
+        entry: scripts/tool zizmor --offline
         language: system
         files: ^\.github/workflows/.*\.ya?ml$
       - id: schemas-metaschema
