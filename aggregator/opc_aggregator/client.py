@@ -54,7 +54,10 @@ def _ids(value: object, limit: int) -> list[str]:
 
 
 def home_doc(store: Mapping[str, Any]) -> dict[str, Any]:
-    """store-home.json: envelope, counts, shelves cut to SHELF_MAX and exactly the rows they use (sans HOME_DROP)."""
+    """store-home.json: envelope, counts, shelves cut to SHELF_MAX, exactly the rows they use.
+
+    Rows omit the HOME_DROP fields.
+    """
     sh = obj(store.get("shelves"))
     shelves: dict[str, Any] = {
         k: _ids(sh.get(k), SHELF_MAX) for k in ("top", "trending", "new", "updated", "safePicks")

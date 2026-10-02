@@ -43,8 +43,10 @@ bundle() {
   local dir=$1 m="$1/store-manifest.json" allowed roles
   shift
   local r
+  local -a want=("$@")
+  ((${#want[@]})) || want=(home search details)
   roles=""
-  for r in ${@:-home search details}; do
+  for r in "${want[@]}"; do
     [[ $r =~ ^[a-z]+$ ]] || die "bad role: $r"
     roles+="${roles:+,}\"$r\""
   done

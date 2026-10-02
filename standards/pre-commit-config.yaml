@@ -8,6 +8,7 @@ repos:
       - id: trailing-whitespace
         exclude: \.md$
       - id: end-of-file-fixer
+        exclude: ^store/dev/  # why: generated snapshot data, kept byte-exact as the aggregator wrote it
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: check-merge-conflict
