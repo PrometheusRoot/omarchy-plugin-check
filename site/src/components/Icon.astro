@@ -1,0 +1,11 @@
+---
+// Decorative sprite icon; pair it with visible or screen-reader text.
+interface Props {
+  id: string;
+  size?: '' | 's' | 'm' | 'l';
+  class?: string;
+}
+const { id, size = '', class: cls = '' } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+<svg class:list={['i', size, cls]} aria-hidden="true"><use href={`${base}icons.svg#${id}`} /></svg>

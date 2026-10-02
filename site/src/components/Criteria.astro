@@ -1,0 +1,23 @@
+---
+import { criteriaView } from '../lib/model';
+import type { Criteria } from '../lib/types';
+import Icon from './Icon.astro';
+
+interface Props {
+  criteria: Criteria | undefined;
+}
+const view = criteriaView(Astro.props.criteria);
+const word = { pass: 'passed', fail: 'failed', na: 'not checked' } as const;
+---
+<span class="row" style="gap:3px">
+  {
+    view.map((c) => (
+      <span class:list={['chip crit tip', c.state]} data-tip={`${c.id}: ${word[c.state]}`}>
+        {c.state === 'pass' && <Icon id="i-check" size="s" />}
+        {c.state === 'fail' && <Icon id="i-x" size="s" />}
+        {c.short}
+        <span class="sr">: {word[c.state]}</span>
+      </span>
+    ))
+  }
+</span>

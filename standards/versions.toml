@@ -35,7 +35,9 @@ quickshell = { version = "0.3.1", job = "store app runtime (system package)", st
 
 [web]
 node = { version = "24", job = "QML/JS logic tests (node --test, store/), site", status = "active" }
-biome = { version = "2.4", job = "format + lint (TS/Astro)", status = "planned" }
-vitest = { version = "4", job = "unit tests (aggregator, site)", status = "planned" }
-playwright = { version = "1.5x", job = "4 e2e specs", status = "planned" }
-lhci = { version = "0.15", job = "Lighthouse CI budgets", status = "planned" }
+astro = { version = "5.18.2", job = "static site (site/, ADR-0036); pinned in site/package.json + lockfile", status = "active" }
+typescript = { version = "5.9.3", job = "astro check, strictest tsconfig (site/)", status = "active" }
+biome = { version = "2.4.16", job = "format + lint (TS/Astro, site/)", status = "active" }
+vitest = { version = "4.1.11", job = "unit tests (site/ data shaping + query)", status = "active" }
+playwright = { version = "1.59.1", job = "4 e2e specs (site/tests/e2e)", status = "active" }
+lhci = { version = "0.15.1", job = "Lighthouse CI budgets: a11y >= 0.95, perf >= 0.9", status = "active" }

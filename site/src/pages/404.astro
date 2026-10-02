@@ -1,0 +1,30 @@
+---
+// Unknown paths. Under plugins/<id>/ this is the "unlisted" state: no report exists because the
+// marketplace does not list that id (ADR-0010).
+import Icon from '../components/Icon.astro';
+import Base from '../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+<Base title="not found" description="No page here.">
+  <section class="sect card" id="nf" data-base={base} style="max-width:70ch">
+    <header><span class="c-unlisted"><Icon id="i-unlisted" /></span><h1 id="nf-h">not found</h1></header>
+    <p id="nf-msg">There is no page at this address.</p>
+    <p class="na" id="nf-hint">
+      Plugins that are not on <a href="https://plugins.omarchy.org/" rel="noopener">plugins.omarchy.org</a> are
+      <b>unlisted</b>: nobody reviews them here, and the checker asks before installing them.
+    </p>
+    <p><a class="btn" href={base}><Icon id="i-list" size="s" />back to the index</a></p>
+  </section>
+  <script>
+    const nf = document.getElementById('nf');
+    const base = nf?.dataset.base ?? '/';
+    const m = location.pathname.slice(base.length).match(/^plugins\/([^/]+)\/?$/);
+    const msg = document.getElementById('nf-msg');
+    const h = document.getElementById('nf-h');
+    if (m?.[1] && msg && h) {
+      h.textContent = 'unlisted';
+      msg.textContent = `"${decodeURIComponent(m[1])}" is not a plugin id on plugins.omarchy.org (or it was listed after this snapshot). No provider reviews it; there is no verdict.`;
+    }
+  </script>
+</Base>

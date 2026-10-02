@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "generatedAt": "2026-10-02T00:00:00Z",
+  "expires": "2026-10-31T00:00:00Z",
+  "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
+  "dev": true,
+  "providers": [
+    {
+      "id": "opc",
+      "name": "omarchy-plugin-check (DEV, unsigned)",
+      "kind": "feed",
+      "tier": "core",
+      "feedUrl": "opc-feed",
+      "signing": "none",
+      "sigstore": null,
+      "validFrom": "2026-10-01T00:00:00Z",
+      "validUntil": null,
+      "excludedWindows": [],
+      "criteriaSupported": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-privilege", "no-obfuscation", "no-secrets"],
+      "conflictsOfInterest": [],
+      "contact": "https://github.com/PrometheusRoot/omarchy-plugin-check/issues"
+    },
+    {
+      "id": "marketplace",
+      "name": "Omarchy marketplace baseline",
+      "kind": "marketplace-baseline",
+      "tier": "unsigned",
+      "feedUrl": "https://raw.githubusercontent.com/omacom/omarchy-plugin-marketplace/main/registry.json",
+      "signing": "none",
+      "sigstore": null,
+      "validFrom": "2026-01-01T00:00:00Z",
+      "validUntil": null,
+      "excludedWindows": [],
+      "criteriaSupported": [],
+      "conflictsOfInterest": [],
+      "contact": "https://github.com/omacom/omarchy-plugin-marketplace"
+    }
+  ]
+}

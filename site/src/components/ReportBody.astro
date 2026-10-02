@@ -1,0 +1,674 @@
+---
+// One provider's full report (the predicate's optional `report` extension): three columns —
+// section nav, sections, aside. Rule identifiers are never shown (ADR-0011).
+import {
+  AREAS,
+  aiVerdicts,
+  asLevel,
+  CAPS,
+  commitView,
+  day,
+  fmtInt,
+  publicReason,
+  STATE_ICON,
+  severityChip,
+  sha7,
+  splitFindings,
+  TIER_NOTE,
+  verdictState,
+} from '../lib/model';
+import { marketplaceUrl } from '../lib/render';
+import type { PluginDoc, ProviderRow, Report, ReportFinding } from '../lib/types';
+import Activity from './Activity.astro';
+import Criteria from './Criteria.astro';
+import Icon from './Icon.astro';
+import MarketplaceCard from './MarketplaceCard.astro';
+import Section from './Section.astro';
+
+interface Props {
+  doc: PluginDoc;
+  row: ProviderRow;
+  report: Report;
+}
+const { doc, row, report: r } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const p = row.provider;
+const sid = (s: string) => `sec-${p}-${s}`;
+const fid = (id: string) => `f-${p}-${id}`;
+const byId = new Map<string, ReportFinding>(r.findings.map((f) => [f.id, f]));
+const ai = aiVerdicts(r);
+const { notable, info } = splitFindings(r.findings);
+const v = r.verdict;
+const s = verdictState(v.outcome);
+const cv = commitView(row, doc.providers);
+const g = r.ai?.guard;
+const pass1 = r.ai?.pass1 ?? null;
+const lintErrors = r.codeQuality.lint.reduce((a, l) => a + l.errors, 0);
+const lintWarnings = r.codeQuality.lint.reduce((a, l) => a + l.warnings, 0);
+const locTotal = Math.max(1, r.codeQuality.loc.total);
+const touched = new Map(r.systemAreas.evidence.map((e) => [e.area, e.findings]));
+const externals = r.capabilities.externalCode?.externals ?? [];
+const deps = r.dependencies;
+const hosts = r.network.hosts;
+const MAXREF = 6;
+const refs = (ids: readonly string[]) => ({
+  shown: ids.slice(0, MAXREF),
+  more: Math.max(0, ids.length - MAXREF),
+});
+const ref = (id: string) => {
+  const f = byId.get(id);
+  return f
+    ? {
+        href: `#${fid(id)}`,
+        text: `${f.category} · ${f.path || 'repo'}${f.line ? `:${f.line}` : ''}`,
+        cls: severityChip(f.severity),
+      }
+    : { href: null, text: id, cls: 'dim' };
+};
+const guards = g
+  ? ([
+      ['canary', g.canaryOk],
+      ['control', g.positiveControlOk],
+      ['tools', g.disallowedToolUse === null ? null : !g.disallowedToolUse],
+      ['schema', g.schemaValid],
+    ] as const)
+  : [];
+const SEV_COLOR = {
+  critical: 'red',
+  high: 'orange',
+  medium: 'yellow',
+  low: 'blue',
+  info: 'border-strong',
+} as const;
+const AI_TEXT = {
+  confirmed: 'ai confirmed',
+  'likely-fp': 'ai: likely false positive',
+  unsure: 'ai: unsure',
+} as const;
+const nav = [
+  ['verdict', 'i-gavel', ''],
+  ['does', 'i-info', ''],
+  ['caps', 'i-grid', ''],
+  ['areas', 'i-layers', String(r.systemAreas.touched.length)],
+  ['net', 'i-net', String(hosts.length)],
+  ['deps', 'i-pkg', String(deps.vulnerabilities.length)],
+  ['secrets', 'i-eyeoff', String(r.secrets.count)],
+  ['supply', 'i-link', ''],
+  ['inject', 'i-bug', ''],
+  ['quality', 'i-quality', ''],
+  ['perf', 'i-perf', ''],
+  ['activity', 'i-commit', ''],
+  ['diff', 'i-diff', ''],
+  ['findings', 'i-list', String(r.findings.length)],
+  ['ai', 'i-bot', ''],
+] as const;
+const kb = (n: number) => `${Math.round(n / 1024)} KB`;
+---
+<div class="rgrid">
+  <nav class="rnav" aria-label="report sections">
+    {
+      nav.map(([id, ic, cnt]) => (
+        <a href={`#${sid(id)}`} data-s={id}>
+          <Icon id={ic} size="m" />
+          {id}
+          {cnt && <span class="cnt num">{cnt}</span>}
+        </a>
+      ))
+    }
+  </nav>
+  <div class="rmain">
+    <Section id={sid('verdict')} title="verdict" icon="i-gavel" note={`${p} · ${row.tier}`}>
+      <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap">
+        <span class={`glyph c-${s}`}><Icon id={STATE_ICON[s]} size="l" /></span>
+        <div style="flex:1;min-width:0">
+          <div class="row" style="align-items:baseline;gap:10px">
+            <b class={`mono c-${s}`} style="font:500 28px/1 var(--mono);letter-spacing:-.03em">{s}</b>
+            <span class="mono num" style="font-size:18px">{v.score}<span class="mute">/100 risk</span></span>
+          </div>
+          <div style="margin:10px 0 14px">
+            <span class="meter big" style={`--mc:var(--s-${s})`} role="img" aria-label={`risk ${v.score} of 100`}>
+              <span class="bar"><i style={`width:${Math.min(100, v.score)}%`}></i></span>
+            </span>
+          </div>
+          <p style="max-width:65ch">{v.summary}</p>
+        </div>
+      </div>
+      {
+        v.hardFails.length > 0 && (
+          <div>
+            <span class="lbl">hard fails · {v.hardFails.length}</span>
+            <div class="row" style="margin-top:6px;gap:4px">
+              {v.hardFails.map((id) => {
+                const f = byId.get(id);
+                return (
+                  <a href={`#${fid(id)}`} class="chip hf">
+                    <Icon id="i-alert" size="s" />
+                    {f ? `${f.category} · ${f.message.replace(/\.$/, '').slice(0, 80)}` : id}
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )
+      }
+      <dl class="kv">
+        <dt>reasons</dt>
+        <dd>{(v.reasons ?? []).length ? (v.reasons ?? []).join(' · ') : <span class="mute">—</span>}</dd>
+        <dt>criteria</dt>
+        <dd><Criteria criteria={v.criteria ?? row.criteria} /></dd>
+        <dt>ai</dt>
+        <dd>
+          {v.aiEscalation ? `escalated ${v.aiEscalation.from} → ${v.aiEscalation.to}: ${v.aiEscalation.reason}` : <span class="mute">no escalation</span>}
+        </dd>
+        <dt>guard</dt>
+        <dd>
+          <span class="guards">
+            {
+              guards.length ? guards.map(([k, ok]) => (
+                <span class:list={['chip sm', ok === true ? 'safe' : ok === false ? 'blocked' : 'dim']}>
+                  {ok === true && <Icon id="i-check" size="s" />}
+                  {ok === false && <Icon id="i-x" size="s" />}
+                  {k}
+                  {ok === null ? ' n/a' : ''}
+                </span>
+              )) : <span class="chip dim">no ai</span>
+            }
+          </span>
+        </dd>
+      </dl>
+    </Section>
+
+    <Section id={sid('does')} title="does" icon="i-info">
+      <dl class="kv">
+        <dt>purpose</dt>
+        <dd>{r.whatItDoes.oneLiner || <span class="mute">—</span>}</dd>
+        <dt>kinds</dt>
+        <dd><span class="row" style="gap:4px">{r.whatItDoes.kinds.map((k) => <span class="chip">{k}</span>)}</span></dd>
+        <dt>entry</dt>
+        <dd class="mono" style="font-size:12px">
+          {r.whatItDoes.entryPoints.length ? r.whatItDoes.entryPoints.map((e) => <div>{e.key} → {e.path}</div>) : '—'}
+        </dd>
+        <dt>manifest</dt>
+        <dd>
+          {r.whatItDoes.manifestValid ? <span class="c-safe">valid</span> : <span class="c-blocked">invalid{r.whatItDoes.manifestError ? `: ${r.whatItDoes.manifestError}` : ''}</span>}
+        </dd>
+        <dt>scope</dt>
+        <dd class="mono" style="font-size:12px">{r.review.pluginPath || 'repository root'} · {r.review.scanTarget}</dd>
+      </dl>
+    </Section>
+
+    <Section id={sid('caps')} title="caps" icon="i-grid" note="level · evidence">
+      <div class="caps">
+        {
+          CAPS.map((c) => {
+            const cap = r.capabilities[c.key];
+            const level = asLevel(cap?.level);
+            const ev = refs(cap?.evidence ?? []);
+            return (
+              <div class="cap">
+                <span class={`ic c-${level === 'none' ? 'none' : level === 'low' ? 'pass' : level === 'med' ? 'med' : 'blocked'}`}>
+                  <Icon id={c.icon} />
+                </span>
+                <span style="min-width:0">
+                  <b>
+                    {c.short} <small>{c.desc}</small>
+                  </b>
+                  {ev.shown.length > 0 && (
+                    <span class="row" style="gap:4px;margin-top:4px">
+                      {ev.shown.map((id) => {
+                        const x = ref(id);
+                        return x.href ? <a href={x.href} class={`chip sm ${x.cls}`}>{x.text}</a> : <span class="chip sm dim">{x.text}</span>;
+                      })}
+                      {ev.more > 0 && <span class="chip sm dim">+{ev.more}</span>}
+                    </span>
+                  )}
+                </span>
+                <span class={`lvl ${level} tip r`} data-tip={`${c.key}: ${level}`} role="img" aria-label={`${c.short}: ${level}`}>
+                  <i></i><i></i><i></i>
+                </span>
+              </div>
+            );
+          })
+        }
+      </div>
+    </Section>
+
+    <Section id={sid('areas')} title="areas" icon="i-layers" note={`${r.systemAreas.touched.length} of ${AREAS.length} touched`}>
+      <div class="areas">
+        {
+          AREAS.map((a) => {
+            const ev = touched.get(a.key);
+            const hit = r.systemAreas.touched.includes(a.key);
+            return (
+              <div class:list={['area tip', hit && 'hit']} data-tip={`${a.key}: ${hit ? `${(ev ?? []).length} evidence` : 'not touched'}`}>
+                <Icon id={a.icon} />
+                <span>{a.short}</span>
+                <span class="sr">{hit ? 'touched' : 'not touched'}</span>
+              </div>
+            );
+          })
+        }
+      </div>
+    </Section>
+
+    <Section id={sid('net')} title="net" icon="i-net" note={`${hosts.length} hosts`}>
+      {
+        hosts.length ? (
+          <div class="tblwrap">
+            <table class="tbl">
+              <thead><tr><th scope="col">host</th><th scope="col">scheme</th><th scope="col">evidence</th></tr></thead>
+              <tbody>
+                {hosts.map((h) => {
+                  const ev = refs(h.evidence);
+                  return (
+                    <tr>
+                      <td class="mono">{h.host}</td>
+                      <td class="mono">{h.schemes.join(' ')}</td>
+                      <td>
+                        <span class="row" style="gap:4px">
+                          {ev.shown.map((id) => {
+                            const x = ref(id);
+                            return x.href ? <a href={x.href} class={`chip sm ${x.cls}`}>{x.text}</a> : <span class="chip sm dim">{x.text}</span>;
+                          })}
+                          {ev.more > 0 && <span class="chip sm dim">+{ev.more}</span>}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p class="na">no network hosts</p>
+        )
+      }
+    </Section>
+
+    <Section id={sid('deps')} title="deps" icon="i-pkg" note={`${deps.vulnerabilities.length} vulns · ${deps.packages.length} pkgs · ${externals.length} external`}>
+      {
+        deps.vulnerabilities.length > 0 && (
+          <div class="tblwrap">
+            <table class="tbl">
+              <thead><tr><th scope="col">vuln</th><th scope="col">package</th><th scope="col">sev</th><th scope="col">fixed in</th></tr></thead>
+              <tbody>
+                {deps.vulnerabilities.map((x) => (
+                  <tr>
+                    <td class="mono">{x.id}</td>
+                    <td class="mono">{x.package}</td>
+                    <td><span class={`chip ${severityChip(x.severity)}`}>{x.severity}</span></td>
+                    <td class="mono">{x.fixedIn ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+      {
+        deps.packages.length > 0 && (
+          <div class="tblwrap">
+            <table class="tbl">
+              <thead><tr><th scope="col">package</th><th scope="col">version</th><th scope="col">eco</th><th scope="col">direct</th><th scope="col">pinned</th><th scope="col">manifest</th></tr></thead>
+              <tbody>
+                {deps.packages.slice(0, 60).map((x) => (
+                  <tr>
+                    <td class="mono">{x.name}</td>
+                    <td class="mono">{x.version ?? '—'}</td>
+                    <td class="mono">{x.ecosystem}</td>
+                    <td>{x.direct ? 'yes' : 'no'}</td>
+                    <td>{x.pinned ? 'yes' : <span class="c-caution">no</span>}</td>
+                    <td class="mono">{x.manifestPath}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {deps.packages.length > 60 && <p class="na">+{deps.packages.length - 60} more in the report json</p>}
+          </div>
+        )
+      }
+      {
+        deps.systemPackages.length > 0 && (
+          <div class="row">
+            <span class="lbl">system</span>
+            {deps.systemPackages.map((x) => (
+              <span class="chip tip" data-tip={x.source}>
+                <Icon id="i-pacman" size="s" />
+                {x.name}
+              </span>
+            ))}
+          </div>
+        )
+      }
+      {
+        externals.length > 0 && (
+          <div class="row">
+            <span class="lbl tip" data-tip="runs code it does not ship: not reviewed here">external</span>
+            {externals.slice(0, 40).map((x) => (
+              <span class="chip caution tip" data-tip={`${x.kind} · ${x.source}`}>{x.name}</span>
+            ))}
+          </div>
+        )
+      }
+      {deps.vulnerabilities.length + deps.packages.length + deps.systemPackages.length + externals.length === 0 && <p class="na">no dependencies</p>}
+    </Section>
+
+    <Section id={sid('secrets')} title="secrets" icon="i-eyeoff" note={String(r.secrets.count)}>
+      {
+        r.secrets.items.length ? (
+          <div class="row" style="gap:4px">
+            {r.secrets.items.map((x) => (
+              <a class="chip caution" href={`#${fid(x.findingId)}`}>
+                <Icon id="i-eyeoff" size="s" />
+                {x.kind}
+                {x.live === true ? ' · live' : x.live === false ? ' · inactive' : ''}
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p class="na">0 secrets</p>
+        )
+      }
+    </Section>
+
+    <Section id={sid('supply')} title="supply" icon="i-link">
+      <div class="tiles">
+        <div class="tile"><span class="l">scorecard</span><span class="v num">{r.supplyChain.scorecard ? r.supplyChain.scorecard.score.toFixed(1) : 'n/a'}</span><span class="d">{r.supplyChain.scorecard ? `openssf · ${r.supplyChain.scorecard.date}` : 'unavailable'}</span></div>
+        <div class="tile"><span class="l">pinned</span><span class="v">{r.supplyChain.pinnedDeps === null ? 'n/a' : r.supplyChain.pinnedDeps ? 'yes' : 'no'}</span></div>
+        <div class="tile"><span class="l">signed</span><span class="v num">{r.supplyChain.signedCommitRatio === null ? 'n/a' : `${Math.round(r.supplyChain.signedCommitRatio * 100)}%`}</span><span class="d">commits</span></div>
+        <div class="tile"><span class="l">bus factor</span><span class="v num">{fmtInt(r.supplyChain.busFactor)}</span></div>
+        <div class="tile"><span class="l">age</span><span class="v num">{r.supplyChain.repoAgeDays === null ? 'n/a' : `${r.supplyChain.repoAgeDays}d`}</span><span class="d">repo age</span></div>
+        <div class="tile"><span class="l">unpinned fetch</span><span class="v num">{r.supplyChain.unpinnedRemoteFetches.length}</span><span class="d">remote code</span></div>
+      </div>
+      {
+        r.supplyChain.scorecard && r.supplyChain.scorecard.checks.length > 0 && (
+          <div class="bars">
+            {r.supplyChain.scorecard.checks.map((c) => (
+              <>
+                <span class="mute">{c.name}</span>
+                <span class="t"><span class="b" style={`width:${Math.max(0, c.score) * 10}%`}></span></span>
+                <span class="num">{c.score < 0 ? 'n/a' : c.score}</span>
+              </>
+            ))}
+          </div>
+        )
+      }
+    </Section>
+
+    <Section id={sid('inject')} title="inject" icon="i-bug">
+      <div class="tiles">
+        <div class="tile"><span class="l">hidden unicode</span><span class="v num">{r.injection.hiddenUnicode.count}</span></div>
+        <div class="tile"><span class="l">prompt injection</span><span class="v num">{r.injection.promptInjection.count}</span></div>
+        <div class="tile"><span class="l">obfuscation</span><span class="v num">{r.injection.obfuscation.count}</span></div>
+      </div>
+      {pass1?.output?.injectionObserved && <p class="na">ai pass 1 saw injection text and ignored it; recorded as a finding, not an outcome change.</p>}
+    </Section>
+
+    <Section id={sid('quality')} title="quality" icon="i-quality">
+      <div class="tiles">
+        <div class="tile"><span class="l">loc</span><span class="v num">{fmtInt(r.codeQuality.loc.total)}</span></div>
+        <div class="tile"><span class="l">lint errors</span><span class="v num">{fmtInt(lintErrors)}</span><span class="d">{r.codeQuality.lint.map((l) => l.tool).join(' · ')}</span></div>
+        <div class="tile"><span class="l">lint warnings</span><span class="v num">{fmtInt(lintWarnings)}</span></div>
+        <div class="tile"><span class="l">tests</span><span class="v num">{r.codeQuality.tests.present ? r.codeQuality.tests.files : 'none'}</span>{r.codeQuality.tests.present && <span class="d">files</span>}</div>
+        <div class="tile"><span class="l">docs</span><span class="v sm">{[r.codeQuality.docs.readme && 'readme', r.codeQuality.docs.changelog && 'changelog'].filter(Boolean).join(' ') || 'none'}</span></div>
+        <div class="tile"><span class="l">license</span><span class="v sm">{r.codeQuality.license.spdx ?? 'none'}</span></div>
+      </div>
+      <div class="bars">
+        {
+          r.codeQuality.loc.byLanguage.slice(0, 8).map((l) => (
+            <>
+              <span class="mute">{l.language}</span>
+              <span class="t"><span class="b" style={`width:${((l.lines / locTotal) * 100).toFixed(1)}%`}></span></span>
+              <span class="num">{fmtInt(l.lines)} <span class="mute">· {l.files} files</span></span>
+            </>
+          ))
+        }
+      </div>
+      {
+        r.codeQuality.hotspots.length > 0 && (
+          <div>
+            <span class="lbl">hotspots</span>
+            <div class="row" style="margin-top:6px;gap:4px">
+              {r.codeQuality.hotspots.map((h) => {
+                const why = publicReason(h.reason);
+                return (
+                  <span class="chip caution tip" data-tip={why || 'flagged by the review'}>
+                    <Icon id="i-file" size="s" />
+                    {h.path}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )
+      }
+    </Section>
+
+    <Section id={sid('perf')} title="perf" icon="i-perf">
+      <div class="tiles">
+        <div class="tile"><span class="l">spawns/min</span><span class="v num">{r.performance.estSpawnsPerMin ?? 'n/a'}</span><span class="d">estimated</span></div>
+        <div class="tile"><span class="l">timers</span><span class="v num">{r.performance.timers.length}</span></div>
+        <div class="tile"><span class="l">keep loaded</span><span class="v">{r.performance.keepLoaded === null ? 'n/a' : r.performance.keepLoaded ? 'yes' : 'no'}</span><span class="d">always resident</span></div>
+        <div class="tile"><span class="l">large assets</span><span class="v num">{r.performance.largeAssets.length}</span><span class="d">{r.performance.largeAssets.slice(0, 3).map((a) => kb(a.bytes)).join(' ')}</span></div>
+      </div>
+      {
+        r.performance.timers.length > 0 && (
+          <div class="tblwrap">
+            <table class="tbl">
+              <thead><tr><th scope="col">timer</th><th scope="col">interval</th><th scope="col">repeat</th><th scope="col">spawns</th></tr></thead>
+              <tbody>
+                {r.performance.timers.slice(0, 30).map((t) => (
+                  <tr>
+                    <td class="mono">{t.path}:{t.line}</td>
+                    <td class="mono num">{t.intervalMs === null ? 'runtime' : `${t.intervalMs / 1000} s`}</td>
+                    <td>{t.repeat ? 'yes' : 'no'}</td>
+                    <td>{t.spawnsProcess ? <span class="c-caution">yes</span> : <span class="mute">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </Section>
+
+    <Section id={sid('activity')} title="activity" icon="i-commit" note="github">
+      <div class="tiles">
+        <div class="tile"><span class="l">commits 90d</span><span class="v num">{fmtInt(r.maintenance.commits90d)}</span></div>
+        <div class="tile"><span class="l">contributors</span><span class="v num">{fmtInt(r.maintenance.contributors)}</span></div>
+        <div class="tile"><span class="l">open issues</span><span class="v num">{fmtInt(r.maintenance.openIssues ?? doc.listing?.gh?.issues ?? null)}</span></div>
+        <div class="tile"><span class="l">release</span><span class="v sm">{r.maintenance.latestRelease ?? 'none'}</span></div>
+        <div class="tile"><span class="l">last commit</span><span class="v sm">{day(r.maintenance.lastCommitAt)}</span></div>
+        <div class="tile"><span class="l">archived</span><span class="v sm">{r.maintenance.archived === null ? 'n/a' : r.maintenance.archived ? 'yes' : 'no'}</span></div>
+      </div>
+      <Activity doc={doc} />
+    </Section>
+
+    <Section id={sid('diff')} title="diff" icon="i-diff" note={r.diffSinceLastReview ? `since ${sha7(r.diffSinceLastReview.fromCommit)}` : ''}>
+      {
+        r.diffSinceLastReview ? (
+          <>
+            <div class="tiles">
+              <div class="tile"><span class="l">files</span><span class="v num">{r.diffSinceLastReview.filesChanged}</span></div>
+              <div class="tile"><span class="l">insertions</span><span class="v num">+{r.diffSinceLastReview.insertions}</span></div>
+              <div class="tile"><span class="l">deletions</span><span class="v num">−{r.diffSinceLastReview.deletions}</span></div>
+              <div class="tile"><span class="l">outcome</span><span class="v sm">{r.diffSinceLastReview.outcomeChange ? `${r.diffSinceLastReview.outcomeChange.from} → ${r.diffSinceLastReview.outcomeChange.to}` : 'same'}</span></div>
+            </div>
+            <dl class="kv">
+              <dt>range</dt>
+              <dd class="mono">{sha7(r.diffSinceLastReview.fromCommit)} → {sha7(r.diffSinceLastReview.toCommit)}</dd>
+              <dt>new</dt>
+              <dd>{r.diffSinceLastReview.newFindings.length} findings</dd>
+              <dt>resolved</dt>
+              <dd>{r.diffSinceLastReview.resolvedRuleIds.length} issue kinds</dd>
+              <dt>caps</dt>
+              <dd>
+                {r.diffSinceLastReview.capabilityChanges.length
+                  ? r.diffSinceLastReview.capabilityChanges.map((c) => <span class="chip">{CAPS.find((x) => x.key === c.capability)?.short ?? c.capability} {c.from} → {c.to}</span>)
+                  : '—'}
+              </dd>
+            </dl>
+          </>
+        ) : (
+          <p class="na">first review · nothing to diff</p>
+        )
+      }
+    </Section>
+
+    <Section id={sid('findings')} title="findings" icon="i-list" note={`${notable.length} above info · ${info.length} info · ${r.findings.filter((f) => f.hardFail).length} hard`}>
+      {
+        [notable, info].map((list, i) =>
+          list.length === 0 ? (
+            i === 0 && <p class="na">no findings above info</p>
+          ) : (
+            <Fragment>
+              {i === 1 ? (
+                <details class="more">
+                  <summary>{list.length} info findings</summary>
+                  <div class="findings">
+                    {list.map((f) => (
+                      <article class="find" id={fid(f.id)} style={`--sc:var(--${SEV_COLOR[f.severity]})`}>
+                        <span class="sev"></span>
+                        <div class="body">
+                          <div class="row">
+                            <span class={`chip c-${f.severity}`} style="border-color:currentColor">{f.severity}</span>
+                            <span class="chip">{f.category}</span>
+                            <span class="loc">{f.path || 'repo'}{f.line ? `:${f.line}` : ''}</span>
+                            <span class="src">{f.source} · {Math.round(f.confidence * 100)}%</span>
+                          </div>
+                          <div class="msg">{f.message}</div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <div class="findings">
+                  {list.map((f) => {
+                    const av = ai.get(f.id);
+                    return (
+                      <article class="find" id={fid(f.id)} style={`--sc:var(--${SEV_COLOR[f.severity]})`}>
+                        <span class="sev"></span>
+                        <div class="body">
+                          <div class="row">
+                            <span class={`chip c-${f.severity}`} style="border-color:currentColor">{f.severity}</span>
+                            <span class="chip">{f.category}</span>
+                            {f.hardFail && (
+                              <span class="chip hf">
+                                <Icon id="i-alert" size="s" />
+                                hard fail
+                              </span>
+                            )}
+                            <span class="loc">{f.path || 'repo'}{f.line ? `:${f.line}` : ''}{f.endLine && f.endLine !== f.line ? `–${f.endLine}` : ''}</span>
+                            <span class="src">{f.source === 'ai' ? 'ai' : f.source} · {Math.round(f.confidence * 100)}%</span>
+                          </div>
+                          <div class="msg">{f.message}</div>
+                          {f.snippet && <pre>{f.snippet}</pre>}
+                          {av && (
+                            <span class={`ai ${av}`}>
+                              <Icon id="i-bot" size="s" />
+                              {AI_TEXT[av]}
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </Fragment>
+          ),
+        )
+      }
+    </Section>
+
+    <Section id={sid('ai')} title="ai" icon="i-bot" note="escalate-only">
+      {
+        pass1 ? (
+          <>
+            <div class="tiles">
+              <div class="tile"><span class="l">pass 1</span><span class="v sm">{pass1.status}</span><span class="d">context pack, read-only</span></div>
+              <div class="tile"><span class="l">turns</span><span class="v num">{fmtInt(pass1.turns)}</span></div>
+              <div class="tile"><span class="l">cost</span><span class="v num">{pass1.costUsd === null ? 'n/a' : `$${pass1.costUsd.toFixed(2)}`}</span></div>
+              <div class="tile"><span class="l">pass 2</span><span class="v num">{r.ai.pass2.length}</span><span class="d">findings re-checked</span></div>
+              <div class="tile"><span class="l">model</span><span class="v sm">{r.review.aiModel ?? 'none'}</span></div>
+              <div class="tile"><span class="l">escalate</span><span class="v sm">{pass1.output?.escalate ? 'yes' : 'no'}</span></div>
+            </div>
+            {pass1.output?.summary && <p>{pass1.output.summary}</p>}
+          </>
+        ) : (
+          <p class="na">this provider did not run an ai pass</p>
+        )
+      }
+      <p class="na">escalate-only: the ai may add findings and raise one level; it never lowers a verdict and never clears a hard fail.</p>
+    </Section>
+  </div>
+
+  <aside class="raside" aria-label="review details">
+    <div class="card">
+      <dl class="kv">
+        <dt>provider</dt>
+        <dd>{p} <span class="chip sm tip" data-tip={TIER_NOTE[row.tier]}>{row.tier}</span></dd>
+        <dt>signature</dt>
+        <dd>
+          {row.verification === 'sigstore' ? (
+            <span class="sig ok"><Icon id="i-sig" size="s" /> verified</span>
+          ) : (
+            <span class="sig no"><Icon id="i-unsig" size="s" /> {row.verification === 'unsigned-dev' ? 'dev · unsigned' : 'unsigned'}</span>
+          )}
+          {row.signer && <div class="mute" style="font-size:10px">{row.signer}</div>}
+        </dd>
+        <dt>commit</dt>
+        <dd>{sha7(row.commit)} <span class="mute">reviewed</span></dd>
+        <dt>tree</dt>
+        <dd>{sha7(row.tree)}</dd>
+        <dt>upstream</dt>
+        <dd>
+          {cv?.upstreamAtScan ? (
+            <>
+              {sha7(cv.upstreamAtScan)} {cv.moved ? <span class="c-stale">≠ commit</span> : <span class="c-safe">= commit</span>}
+            </>
+          ) : (
+            '—'
+          )}
+          <div class="mute" style="font-size:10px">at review time</div>
+        </dd>
+        <dt>mkt</dt>
+        <dd>
+          {cv?.marketplace ? (
+            <>
+              {sha7(cv.marketplace)} {cv.marketplaceMatch ? <span class="c-safe">=</span> : <span class="c-caution">≠</span>}
+            </>
+          ) : (
+            '—'
+          )}
+        </dd>
+        <dt>reviewed</dt>
+        <dd>{day(r.review.reviewedAt)}</dd>
+        <dt>scanner</dt>
+        <dd>{r.review.scannerVersion}</dd>
+        <dt>rules</dt>
+        <dd>{r.review.rulesVersion}</dd>
+        <dt>ai</dt>
+        <dd>{r.review.aiModel ?? 'none'}</dd>
+        <dt>previous</dt>
+        <dd>{sha7(r.review.previousCommit)}</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <span class="lbl">tools · {r.review.tools.length}</span>
+      <div class="tools">
+        {r.review.tools.map((t) => <span class={`chip ${t.status} tip`} data-tip={`${t.name} ${t.version ?? ''} · ${t.status}`}>{t.name}</span>)}
+      </div>
+    </div>
+    <MarketplaceCard doc={doc} />
+    <div class="card">
+      <span class="lbl">data</span>
+      <div class="row" style="gap:6px">
+        <a class="chip" href={`${base}api/v1/plugins/${doc.id}.json`}>{doc.id}.json</a>
+        {row.statement && <a class="chip" href={`${base}api/v1/${row.statement}`}>statement · {sha7(row.commit)}</a>}
+        <a class="chip" href={marketplaceUrl(doc.id)} rel="noopener">↗ marketplace</a>
+      </div>
+    </div>
+  </aside>
+</div>

@@ -1,0 +1,116 @@
+---
+// One report page per plugin of the snapshot (ADR-0036): combined verdict, every provider's row,
+// then one panel per provider (the primary report first; the others toggle in place).
+import type { GetStaticPaths } from 'astro';
+import Icon from '../../components/Icon.astro';
+import ProviderTable from '../../components/ProviderTable.astro';
+import ReportBody from '../../components/ReportBody.astro';
+import RowBody from '../../components/RowBody.astro';
+import Base from '../../layouts/Base.astro';
+import { load } from '../../lib/data';
+import {
+  combinedNote,
+  isCapped,
+  pluginState,
+  primaryReportRow,
+  providerShort,
+  STATE_ICON,
+  sha7,
+  sortRows,
+  verdictState,
+} from '../../lib/model';
+import { marketplaceUrl } from '../../lib/render';
+import type { PluginDoc } from '../../lib/types';
+
+export const getStaticPaths = (() =>
+  load().docs.map((doc) => ({ params: { id: doc.id }, props: { doc } }))) satisfies GetStaticPaths;
+
+interface Props {
+  doc: PluginDoc;
+}
+const { doc } = Astro.props;
+const rows = sortRows(doc.providers);
+const primary = primaryReportRow(rows) ?? rows.find((r) => r.tier !== 'unsigned') ?? rows[0] ?? null;
+const selected = primary?.provider ?? null;
+const reviewed = primaryReportRow(rows)?.commit ?? null;
+const s = pluginState(doc.listingState, doc.combined.verdict);
+const l = doc.listing;
+const moved = (() => {
+  const r = primaryReportRow(rows)?.detail?.report;
+  const up = r?.review.upstreamHeadAtScan;
+  return up && reviewed && up !== reviewed ? up : null;
+})();
+const desc =
+  `${doc.name}: ${s} (combined verdict of ${rows.length} provider row${rows.length === 1 ? '' : 's'}). ${l?.desc ?? ''}`.slice(
+    0,
+    300,
+  );
+---
+<Base title={doc.name} description={desc} nav="report">
+  <div class="rhead">
+    <div class="t">
+      <span class={`glyph c-${s}`}><Icon id={STATE_ICON[s]} size="l" /><span class="sr">{s}</span></span>
+      <div style="min-width:0">
+        <h1>{doc.name}</h1>
+        <span class="id">
+          {doc.id}{l?.cat ? ` · ${l.cat}` : ''}{l?.kind ? ` · ${l.kind.toLowerCase()}` : ''} ·
+          <a href={doc.repo} rel="noopener">{doc.repo.replace('https://github.com/', '')} <Icon id="i-ext" size="s" /></a> ·
+          <a href={marketplaceUrl(doc.id)} rel="noopener">↗ marketplace</a>
+        </span>
+      </div>
+    </div>
+    {doc.listingState === 'builtin' && <span class="chip dim">built-in plugin</span>}
+  </div>
+
+  <div class="combined" style={`--oc:var(--s-${s})`}>
+    <div class="big">
+      <span class={`glyph c-${s}`}><Icon id={STATE_ICON[s]} /></span>
+      <b class={`c-${s}`}>{s}</b>
+      <span class="mute">{combinedNote(doc)}</span>
+      {
+        doc.combined.contested && (
+          <span class="chip contested tip" data-tip="trusted providers disagree by two levels or more, or a trusted safe meets a capped risky/blocked">
+            <Icon id="i-flag" size="s" />contested
+          </span>
+        )
+      }
+    </div>
+    <div class="pv">
+      {
+        rows.map((r) => {
+          const pub = verdictState(r.verdict);
+          const eff = verdictState(r.effectiveVerdict);
+          return (
+            <span class={`chip ${pub}`}>
+              {providerShort(r.provider)} <Icon id={STATE_ICON[pub]} size="s" />
+              {eff !== pub && (<>→<Icon id={STATE_ICON[eff]} size="s" /></>)}
+              {isCapped(r.tier) && <span class="capd" aria-hidden="true">≤</span>}
+              <span class="sr">{`${r.provider}: ${pub}${eff !== pub ? `, counts as ${eff}` : ''}`}</span>
+            </span>
+          );
+        })
+      }
+      {reviewed && <span class="chip brand"><Icon id="i-commit" size="s" />reviewed {sha7(reviewed)}</span>}
+      {moved && <span class="chip stale tip" data-tip="upstream HEAD had moved past the reviewed commit when it was reviewed"><Icon id="i-stale" size="s" />upstream {sha7(moved)}</span>}
+      {doc.listingState === 'retired' && <span class="chip retired"><Icon id="i-retired" size="s" />retired from marketplace</span>}
+      {!rows.length && <span class="chip dim">no provider rows</span>}
+    </div>
+  </div>
+
+  {rows.length > 0 && <ProviderTable rows={rows} selected={selected} reviewedCommit={reviewed} />}
+
+  {
+    rows.length ? (
+      rows.map((r) => (
+        <div class="ppanel" id={`panel-${r.provider}`} data-panel={r.provider} hidden={r.provider !== selected}>
+          {r.detail?.report ? <ReportBody doc={doc} row={r} report={r.detail.report} /> : <RowBody doc={doc} row={r} />}
+        </div>
+      ))
+    ) : (
+      <RowBody doc={doc} row={null} />
+    )
+  }
+  <script>
+    import '../../client/report';
+  </script>
+</Base>
