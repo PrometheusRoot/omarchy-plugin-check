@@ -14,7 +14,16 @@
     "listingState": { "enum": ["listed", "retired", "builtin"] },
     "marketplaceUrl": { "type": "string", "format": "uri" },
     "combined": { "$ref": "#/$defs/combined" },
-    "providers": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+    "providers": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+    "listing": { "$ref": "store.schema.json#/$defs/plugin", "description": "The plugin's full store.json row (listing, GitHub activity, ranking factors, README gallery). Present when the aggregator ran with stats + ranking; a client that loaded only the columnar search file reads the full record here (ADR-0032)." },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weeks"],
+      "properties": {
+        "weeks": { "type": "array", "minItems": 52, "maxItems": 52, "items": { "type": ["integer", "null"], "minimum": 0 }, "description": "Default-branch commits per week, oldest first, last = the current week; null = older than the oldest of the last 100 commits read (unknown)." }
+      }
+    }
   },
   "$defs": {
     "combined": {
@@ -49,7 +58,7 @@
         "summary": { "type": "string", "maxLength": 200 },
         "criteria": { "type": "object" },
         "findings": { "type": "array", "items": { "type": "object" } },
-        "detail": { "type": "object", "description": "Source-specific extras (marketplace: baseline findings + capabilities)." },
+        "detail": { "type": "object", "description": "Source-specific extras. Marketplace: baseline findings + capabilities. Feed rows: scope, method, target and, when the provider embeds it, `report` (the predicate's optional report extension, rule ids opaque)." },
         "statement": { "type": ["string", "null"], "description": "API-relative path of the verified statement (immutable)." }
       }
     }

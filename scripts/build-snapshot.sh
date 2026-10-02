@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Collector + aggregator end to end (ADR-0026, docs/RUNBOOK.md "Snapshot"):
-#   sync → github (resumable) → stats → aggregate api → rank → aggregate + sign store.json → verify.
+#   sync → github (resumable) → stats → aggregate api → rank → aggregate + sign store.json and the
+#   store client bundle (store-manifest.json + home/search/details, ADR-0032) → verify both.
 # usage: build-snapshot.sh --out DIR --providers providers.json [--providers-sig F] [--key KEY]
 #        [--seed-catalog old-catalog.json]... [--no-github] [--max-repos N] [--offline-sigstore]
 set -Eeuo pipefail
@@ -50,3 +51,6 @@ opc-collect --cache "$cache" rank --stats "$out/stats.json" --api-index "$out/ap
 opc-aggregate build --providers "$providers" "${sig_args[@]}" "${market[@]}" --out "$out" "${state[@]}" $offline \
   --stats "$out/stats.json" --ranking "$out/ranking.json" --sign-key "$key"
 "$root/spec/verify-snapshot.sh" "$out/store.json" "$out/store.json.sig" "$root/spec/keys/allowed_signers.dev"
+# The store app's client bundle (ADR-0032): the same check the app runs before parsing it.
+OPC_STORE_ALLOWED_SIGNERS="$root/spec/keys/allowed_signers.dev" OPC_STORE_VERIFY_STATE="$out/store-bundle-version" \
+  "$root/store/bin/omarchy-plugin-store-verify" bundle "$out"

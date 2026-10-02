@@ -62,7 +62,8 @@ def test_example_feed_end_to_end(tmp_path):
     assert st.registry == 5
     assert agg.rejected == []
     out = tmp_path / "out"
-    index = publish.write_api(agg, out, T0, registry_signed=False)
+    index, hashes = publish.write_api(agg, out, T0, registry_signed=False)
+    assert set(hashes) == {"example.clock", "example.suite-a"}
     assert {p["id"] for p in index["plugins"]} == {"example.clock", "example.suite-a"}
     doc = json.loads((out / "plugins" / "example.clock.json").read_text())
     assert schemas.errors(doc, "api-plugin") == []
@@ -253,6 +254,18 @@ def test_snapshot_assemble(tmp_path):
         "basis": "trusted",
         "commit": C1,
         "providers": {"example": "caution", "marketplace": "safe"},
+        "criteria": {
+            "checked": [
+                "safe-to-run",
+                "no-network",
+                "no-exec",
+                "no-persistence",
+                "no-privilege",
+                "no-obfuscation",
+                "no-secrets",
+            ],
+            "failed": ["no-exec"],
+        },
     }
     assert (clock["rank"], clock["report"], clock["install"]) == (
         1,
@@ -266,7 +279,7 @@ def test_snapshot_assemble(tmp_path):
     assert "gh" not in suite
     assert "img" not in suite
     assert by["omarchy.weather"]["verdict"]["combined"] == "unknown"
-    assert "report" not in by["omarchy.weather"]
+    assert by["omarchy.weather"]["report"] is True  # every snapshot plugin has a detail doc
     assert by["omarchy.weather"]["state"] == "builtin"
     assert doc["catalog"] == {
         "generatedAt": "2026-10-01T00:00:00.000Z",

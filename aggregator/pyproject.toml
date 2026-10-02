@@ -66,7 +66,7 @@ layers = [
   "opc_aggregator.publish",
   "opc_aggregator.build",
   "opc_aggregator.fetch | opc_aggregator.sigstore_verifier | opc_aggregator.unsigned | opc_aggregator.sshsig | opc_aggregator.state",
-  "opc_aggregator.api | opc_aggregator.snapshot | opc_aggregator.statements",
+  "opc_aggregator.api | opc_aggregator.snapshot | opc_aggregator.statements | opc_aggregator.client",
   "opc_aggregator.admit | opc_aggregator.merge",
   "opc_aggregator.marketplace",
   "opc_aggregator.ports",

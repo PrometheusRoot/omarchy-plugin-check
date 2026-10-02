@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -64,32 +65,68 @@ def cmd_build(args: argparse.Namespace) -> int:
     local = LocalFetcher(base) if reg_doc.get("dev") else None
     agg = build.aggregate(inp, RoutingFetcher(HttpsFetcher(), local), _verifiers(offline=args.offline), st)
     out = Path(args.out)
-    publish.write_api(agg, out / "api" / "v1", now, registry_signed=signed)
     summary: dict[str, Any] = {
         "plugins": len(agg.combined),
         "providers": [p.doc() for p in agg.providers],
         "rejected": len(agg.rejected),
     }
-    if args.stats or args.ranking:
+    if not (args.stats or args.ranking):
+        publish.write_api(agg, out / "api" / "v1", now, registry_signed=signed)
+    else:
         version = max(int(now.timestamp()), (st.snapshot or 0) + 1)
         dev = agg.registry.dev or (
             args.sign_key is not None and Path(args.sign_key).resolve() == DEV_KEY.resolve()
         )
         meta = snapshot.SnapshotMeta(now, version, now + SNAPSHOT_TTL, dev, args.api_base)
+        stats = _json(args.stats) if args.stats else None
         doc = snapshot.assemble(
             meta,
             agg.market,
             agg.rows,
             agg.combined,
             providers=[p.doc() for p in agg.providers],
-            stats=_json(args.stats) if args.stats else None,
+            stats=stats,
             ranking=_json(args.ranking) if args.ranking else None,
         )
-        store, sig = publish.write_store(doc, out, Path(args.sign_key) if args.sign_key else None)
+        listings = publish.Listings(
+            rows={p["id"]: p for p in doc["plugins"]}, weeks=snapshot.weeks_by_plugin(agg.market, stats)
+        )
+        _, hashes = publish.write_api(agg, out / "api" / "v1", now, registry_signed=signed, listings=listings)
+        key = Path(args.sign_key) if args.sign_key else None
+        store, sig = publish.write_store(doc, out, key)
+        manifest, msig = publish.write_bundle(doc, hashes, out, key)
         st.snapshot = version
-        summary |= {"store": str(store), "signature": str(sig) if sig else None, "version": version}
+        summary |= {
+            "store": str(store),
+            "signature": str(sig) if sig else None,
+            "manifest": str(manifest),
+            "manifestSignature": str(msig) if msig else None,
+            "version": version,
+        }
     state.save(st_path, st)
     print(json.dumps(summary, indent=2))
+    return 0
+
+
+def cmd_client_bundle(args: argparse.Namespace) -> int:
+    """Project an existing store.json (+ its api dir) into the client bundle (dev data, ADR-0032)."""
+    out = Path(args.out)
+    store_path = Path(args.store)
+    doc = _json(store_path)
+    api_dir = Path(args.api) if args.api else store_path.parent / doc["apiBase"]
+    hashes = {
+        f.stem: hashlib.sha256(f.read_bytes()).hexdigest()
+        for f in sorted((api_dir / "plugins").glob("*.json"))
+    }
+    out.mkdir(parents=True, exist_ok=True)
+    if store_path.resolve() != (out / "store.json").resolve():
+        publish.write_store(doc, out, None)
+    manifest, sig = publish.write_bundle(doc, hashes, out, Path(args.sign_key) if args.sign_key else None)
+    print(
+        json.dumps(
+            {"manifest": str(manifest), "signature": str(sig) if sig else None, "details": len(hashes)}
+        )
+    )
     return 0
 
 
@@ -153,6 +190,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--offline", action="store_true", help="sigstore: use the bundled trust root, no TUF refresh"
     )
     b.set_defaults(func=cmd_build)
+    c = sub.add_parser("client-bundle", help="store.json (+ api dir) → store app client bundle")
+    c.add_argument("store")
+    c.add_argument("--api", help="api/v1 directory (default: next to store.json at its apiBase)")
+    c.add_argument("--out", required=True)
+    c.add_argument("--sign-key", help="ed25519 key for store-manifest.json.sig")
+    c.set_defaults(func=cmd_client_bundle)
     k = sub.add_parser("keygen", help="create the DEV snapshot key")
     k.add_argument("--key", default=str(DEV_KEY))
     k.set_defaults(func=cmd_keygen)

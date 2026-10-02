@@ -509,12 +509,53 @@
               "additionalProperties": {
                 "$ref": "common.schema.json#/$defs/verdict"
               }
+            },
+            "criteria": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checked",
+                "failed"
+              ],
+              "description": "The deciding trusted row's criteria (absent without a trusted row).",
+              "properties": {
+                "checked": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "common.schema.json#/$defs/criterion"
+                  }
+                },
+                "failed": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "common.schema.json#/$defs/criterion"
+                  }
+                }
+              }
+            },
+            "risk": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "The deciding trusted row's risk score from its optional report extension (0 = no risk signal)."
             }
           }
         },
         "report": {
           "const": true,
-          "description": "An aggregated view exists at apiBase + 'plugins/<id>.json'."
+          "description": "An aggregated view exists at apiBase + 'plugins/<id>.json' (every plugin of a snapshot has one, ADR-0032)."
+        },
+        "ini": {
+          "type": "string",
+          "maxLength": 4,
+          "description": "Marketplace initials for the tile (else derived from the name)."
+        },
+        "accent": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Marketplace accent name (cyan, amber, ...); else derived from the id."
         }
       },
       "description": "Compact row: an absent key means null / empty list; `state` absent = listed; `install` absent = `omarchy plugin add <repo>.git --enable`, \"\" = not installable via omarchy plugin add."

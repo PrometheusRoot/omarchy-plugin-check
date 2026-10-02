@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/store-home.schema.json",
+  "title": "Store home slice (store-home.json)",
+  "description": "What the store's first frame shows (ADR-0032): snapshot meta, shelves (first SHELF_MAX ids each) and only the plugin rows those shelves reference, in store.json row format without `gallery` (in the detail document). Verified through the signed manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "version", "generatedAt", "expires", "dev", "catalog", "imageBase", "apiBase", "providers", "ranking", "categories", "counts", "total", "shelves", "plugins"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "omarchy-plugin-check/store-home" },
+    "version": { "type": "integer", "minimum": 1 },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "expires": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "dev": { "type": "boolean" },
+    "catalog": { "$ref": "store.schema.json#/properties/catalog" },
+    "imageBase": { "type": "string" },
+    "apiBase": { "type": "string" },
+    "providers": { "$ref": "store.schema.json#/properties/providers" },
+    "ranking": { "$ref": "store.schema.json#/properties/ranking" },
+    "categories": { "$ref": "store.schema.json#/properties/categories" },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["safe", "caution", "risky", "blocked", "unknown", "images"],
+      "properties": {
+        "safe": { "type": "integer", "minimum": 0 },
+        "caution": { "type": "integer", "minimum": 0 },
+        "risky": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "images": { "type": "integer", "minimum": 0, "description": "Plugins with a thumbnail." }
+      }
+    },
+    "total": { "type": "integer", "minimum": 0, "description": "Rows in the search file / store.json." },
+    "shelves": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top", "trending", "new", "updated", "safePicks", "byCategory"],
+      "properties": {
+        "top": { "$ref": "#/$defs/ids" },
+        "trending": { "$ref": "#/$defs/ids" },
+        "new": { "$ref": "#/$defs/ids" },
+        "updated": { "$ref": "#/$defs/ids" },
+        "safePicks": { "$ref": "#/$defs/ids" },
+        "byCategory": { "type": "object", "additionalProperties": { "$ref": "#/$defs/ids" } }
+      }
+    },
+    "plugins": { "type": "array", "items": { "$ref": "store.schema.json#/$defs/plugin" }, "description": "Exactly the rows the shelves reference." }
+  },
+  "$defs": {
+    "ids": { "type": "array", "maxItems": 12, "items": { "$ref": "common.schema.json#/$defs/pluginId" } }
+  }
+}

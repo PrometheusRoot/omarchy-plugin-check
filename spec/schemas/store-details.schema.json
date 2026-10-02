@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/store-details.schema.json",
+  "title": "Store detail-document hashes (store-details.json)",
+  "description": "sha256 of every per-plugin detail document (apiBase + 'plugins/<id>.json', api-plugin.schema.json), so a client verifies a lazily loaded detail view against the signed manifest (ADR-0032). Read by the verifier, not parsed by the app.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "version", "docs"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "omarchy-plugin-check/store-details" },
+    "version": { "type": "integer", "minimum": 1 },
+    "docs": {
+      "type": "object",
+      "propertyNames": { "$ref": "common.schema.json#/$defs/pluginId" },
+      "additionalProperties": { "$ref": "common.schema.json#/$defs/sha256" }
+    }
+  }
+}

@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/store-search.schema.json",
+  "title": "Store search columns (store-search.json)",
+  "description": "Every plugin as parallel arrays (row i of every column = plugin i, store.json order), repeated strings interned into `dict` and referenced by index (ADR-0032). Built so a JS worker builds its search index from a few dozen arrays instead of thousands of objects. Full records live in the detail documents (api-plugin `listing`). Verified through the signed manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "version",
+    "n",
+    "dict",
+    "cols"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "kind": {
+      "const": "omarchy-plugin-check/store-search"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "n": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8191
+    },
+    "dict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cat",
+        "kind",
+        "author",
+        "verif",
+        "accent",
+        "verdict",
+        "basis",
+        "providers",
+        "criteria"
+      ],
+      "properties": {
+        "cat": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "author": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verif": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accent": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verdict": {
+          "const": [
+            "safe",
+            "caution",
+            "risky",
+            "blocked",
+            "unknown"
+          ]
+        },
+        "basis": {
+          "const": [
+            "trusted",
+            "untrusted",
+            "none"
+          ]
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/providerId"
+          }
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/criterion"
+          },
+          "description": "Bit i of critC/critF = criteria[i]."
+        }
+      }
+    },
+    "cols": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "author",
+        "tags",
+        "desc",
+        "cat",
+        "kind",
+        "verif",
+        "verdict",
+        "basis",
+        "flags",
+        "rank",
+        "score",
+        "stars",
+        "vel30",
+        "listed",
+        "updated",
+        "thumb",
+        "repo",
+        "commit",
+        "risk",
+        "critC",
+        "critF",
+        "prov",
+        "ini",
+        "accent"
+      ],
+      "properties": {
+        "id": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/pluginId"
+          },
+          "description": "Marketplace id."
+        },
+        "name": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Display name."
+        },
+        "author": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Index into dict.author (-1 = none)."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags joined with one space."
+        },
+        "desc": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Description, cut at a word boundary to at most 200 characters (full text: listing.desc)."
+        },
+        "cat": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Index into dict.cat (-1 = none)."
+        },
+        "kind": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Index into dict.kind (-1 = none)."
+        },
+        "verif": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Index into dict.verif (-1 = none)."
+        },
+        "verdict": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "description": "Combined verdict, index into dict.verdict."
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "description": "Index into dict.basis."
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Bits: 1 contested, 2 archived, 4 not installable, 8 custom install command (listing.install), 16 retired, 32 builtin, 64 has a detail document."
+        },
+        "rank": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "description": "Rank (null = unranked)."
+        },
+        "score": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "description": "Rank score (null = unranked)."
+        },
+        "stars": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "GitHub stars (0 without data)."
+        },
+        "vel30": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "description": "Stars gained in 30 days (null = no data)."
+        },
+        "listed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Marketplace listedAt, YYYY-MM-DD ('' = unknown)."
+        },
+        "updated": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Last update (repositoryUpdatedAt, else last commit), YYYY-MM-DD."
+        },
+        "thumb": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "img.thumb as in store.json ('' = none)."
+        },
+        "repo": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "'owner/name' for https://github.com/owner/name, else the full URL ('' = none)."
+        },
+        "commit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "verdict.commit ('' = none)."
+        },
+        "risk": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "description": "verdict.risk (null = none)."
+        },
+        "critC": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "verdict.criteria.checked as a bitmask over dict.criteria."
+        },
+        "critF": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "verdict.criteria.failed as a bitmask over dict.criteria."
+        },
+        "prov": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 4
+            }
+          },
+          "description": "One column per dict.providers entry: that provider's verdict index, -1 = no row."
+        },
+        "ini": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Initials ('' = derive from the name)."
+        },
+        "accent": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Index into dict.accent (-1 = derive from the id)."
+        }
+      }
+    }
+  }
+}

@@ -98,9 +98,11 @@ The marketplace baseline (registry.json `automatedSecurityBaseline.outcome`) map
 ## 6. The snapshot
 
 The aggregator publishes one compact [`store.json`](schemas/store.schema.json) (marketplace
-metadata, GitHub activity, ranking, shelves, per-provider verdicts and the combined verdict) with a
-detached SSH signature (`store.json.sig`, namespace `omarchy-plugin-check-snapshot`, ed25519).
-Clients verify it offline before use (ADR-0013):
+metadata, GitHub activity, ranking, shelves, per-provider verdicts and the combined verdict; per
+plugin also the deciding trusted row's `verdict.criteria` and `verdict.risk`, and the marketplace
+`ini`/`accent`) with a detached SSH signature (`store.json.sig`, namespace
+`omarchy-plugin-check-snapshot`, ed25519). It is the CLI's contract. Clients verify it offline
+before use (ADR-0013):
 
 ```sh
 spec/verify-snapshot.sh store.json store.json.sig spec/keys/allowed_signers
@@ -110,3 +112,33 @@ which runs `ssh-keygen -Y verify -f allowed_signers -I omarchy-plugin-check -n
 omarchy-plugin-check-snapshot -s store.json.sig < store.json` and then rejects an expired snapshot
 or a `version` lower than the last accepted one. `spec/keys/dev-snapshot.pub` is a **development
 key only**; snapshots signed with it carry `"dev": true`.
+
+## 7. The store client bundle
+
+Next to `store.json` the same build writes the store app's bundle (ADR-0032), a projection of
+`store.json` shaped for a fast cold start:
+
+| File | Schema | Content |
+|---|---|---|
+| `store-manifest.json` (+ `.sig`) | [store-manifest](schemas/store-manifest.schema.json) | `version`, `expires`, `dev` (as store.json) and `{role, path, sha256, size}` of every file below and of `store.json` |
+| `store-home.json` | [store-home](schemas/store-home.schema.json) | envelope, counts, shelves (12 ids each) and only the rows they reference |
+| `store-search.json` | [store-search](schemas/store-search.schema.json) | every plugin as parallel arrays; repeated strings interned in `dict` |
+| `store-details.json` | [store-details](schemas/store-details.schema.json) | plugin id → sha256 of `apiBase` + `plugins/<id>.json` |
+
+Only the manifest is signed: `ssh-keygen -Y sign -n omarchy-plugin-check-snapshot` (the snapshot
+namespace; its `kind` keeps it apart from store.json). A client verifies the manifest signature,
+`kind`, expiry and rollback **before parsing anything else**, then each file's size and sha256;
+a detail document is used only if its sha256 is the one `store-details.json` lists. The store
+app's verifier is `store/bin/omarchy-plugin-store-verify` (bash + ssh-keygen + jq + sha256sum):
+
+```sh
+OPC_STORE_DEV_KEYS=1 store/bin/omarchy-plugin-store-verify bundle DIR      # DEV key only when asked
+store/bin/omarchy-plugin-store-verify detail DIR <plugin id>                # prints the verified doc
+```
+
+In a snapshot build every plugin has a detail document (`api/v1/plugins/<id>.json`) carrying
+its full store row (`listing`, including the README `gallery`), weekly commits
+(`activity.weeks`) and each feed row's `detail.report` when the provider embedded the optional
+`report` extension (`opsec attest|feed --include-report`: capabilities, system areas, network
+hosts, dependencies + advisories, performance, code quality, maintenance, AI summary, verdict
+reasons and criteria; rule identifiers already opaque).

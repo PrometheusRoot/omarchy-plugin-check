@@ -54,6 +54,7 @@ def row_from_statement(stmt: Mapping[str, Any], provider: Provider, verified: Ve
             "scope": pred.get("scope"),
             "method": pred["provider"].get("method"),
             "target": pred["plugin"].get("target"),
-        },
+        }
+        | ({"report": pred["report"]} if pred.get("report") else {}),
         statement=statement_path(pred["plugin"]["id"], provider.id, digest["gitCommit"]),
     )

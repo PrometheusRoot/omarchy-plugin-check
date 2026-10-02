@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/store-manifest.schema.json",
+  "title": "Store client bundle manifest (store-manifest.json)",
+  "description": "The one signed file of the store app's client bundle (ADR-0032): sha256 and size of every bundle file, the snapshot version and expiry. Signed detached: store-manifest.json.sig = `ssh-keygen -Y sign -n omarchy-plugin-check-snapshot` (same namespace as store.json; `kind` tells the two apart). Clients verify the signature, `kind`, expiry and anti-rollback, then each file's sha256, before parsing any of them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "version", "generatedAt", "expires", "dev", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "omarchy-plugin-check/store-manifest" },
+    "version": { "type": "integer", "minimum": 1, "description": "Same version as the store.json of the same build (unix seconds)." },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "expires": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "dev": { "type": "boolean" },
+    "files": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "path", "sha256", "size"],
+        "properties": {
+          "role": { "enum": ["home", "search", "details", "store"] },
+          "path": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*\\.json$", "description": "Relative to the manifest." },
+          "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from opc_aggregator.marketplace import Marketplace, Plugin
 
 API_VERSION = "v1"
+WEEKS = 52
 
 
 def row_doc(row: Row) -> dict[str, Any]:
@@ -59,8 +60,20 @@ def combined_doc(c: Combined) -> dict[str, Any]:
     }
 
 
-def plugin_doc(plugin: Plugin, rows: Sequence[Row], combined: Combined) -> dict[str, Any]:
-    """api/v1/plugins/<id>.json."""
+def plugin_doc(
+    plugin: Plugin,
+    rows: Sequence[Row],
+    combined: Combined,
+    *,
+    listing: Mapping[str, Any] | None = None,
+    weeks: Sequence[int | None] | None = None,
+) -> dict[str, Any]:
+    """api/v1/plugins/<id>.json; with a snapshot also the full store row and weekly commits."""
+    extra: dict[str, Any] = {}
+    if listing is not None:
+        extra["listing"] = dict(listing)
+    if weeks is not None and len(weeks) == WEEKS:
+        extra["activity"] = {"weeks": list(weeks)}
     return {
         "schemaVersion": 1,
         "id": plugin.id,
@@ -70,7 +83,7 @@ def plugin_doc(plugin: Plugin, rows: Sequence[Row], combined: Combined) -> dict[
         "marketplaceUrl": ids.marketplace_url(plugin.id),
         "combined": combined_doc(combined),
         "providers": [row_doc(r) for r in rows],
-    }
+    } | extra
 
 
 def quality_of(rows: Sequence[Row]) -> int | None:

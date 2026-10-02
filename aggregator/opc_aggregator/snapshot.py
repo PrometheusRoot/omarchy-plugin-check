@@ -10,9 +10,11 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from opc_spec.jsonv import arr, obj, strs, text
+from opc_spec.jsonv import arr, integer, obj, strs, text
 from opc_spec.marketplace import manifest_dir
+from opc_spec.vocab import STORE_KIND
 
+from opc_aggregator.merge import effective
 from opc_aggregator.model import Combined, Row, iso
 
 if TYPE_CHECKING:
@@ -21,7 +23,7 @@ if TYPE_CHECKING:
 
     from opc_aggregator.marketplace import Marketplace, Plugin
 
-KIND = "omarchy-plugin-check/store"
+KIND = STORE_KIND
 IMAGE_BASE = "https://plugins.omarchy.org/assets/img/plugins/"
 IMAGE_PREFIX = "assets/img/plugins/"
 MARKETPLACE_ORIGIN = "https://plugins.omarchy.org/"
@@ -42,6 +44,7 @@ GH_KEYS = (
 )
 SHELF_KEYS = ("top", "trending", "new", "updated", "safePicks")
 GALLERY_MAX = 8
+WEEKS = 52
 REQUIRED = frozenset({"id", "name", "verdict"})
 
 
@@ -113,8 +116,27 @@ def _gallery(repo_stats: Mapping[str, Any] | None, path: str) -> list[str]:
     return (own or strs(stats.get("images")))[:GALLERY_MAX]
 
 
+def deciding_row(rows: Sequence[Row], combined: Combined | None) -> Row | None:
+    """The trusted row whose effective verdict is the combined one (core before verified), if any."""
+    if combined is None or combined.basis != "trusted":
+        return None
+    order = {"core": 0, "verified": 1}
+    hits = [r for r in rows if r.tier in order and effective(r).verdict == combined.verdict]
+    return min(hits, key=lambda r: (order[r.tier], r.provider)) if hits else None
+
+
+def _risk(row: Row) -> int | None:
+    """The row's risk score from its report extension (`report.verdict.score`), clamped to 0..100."""
+    score = integer(obj(obj(obj(row.detail).get("report")).get("verdict")).get("score"))
+    return None if score is None else max(0, min(100, score))
+
+
 def _verdict(rows: Sequence[Row], combined: Combined | None) -> dict[str, Any]:
-    """Compact verdict: `contested` only if true; `commit` only for a trusted basis at one commit."""
+    """Compact verdict; optional keys only when they carry information.
+
+    `contested` only if true; `commit` only for a trusted basis at one commit; `criteria` and
+    `risk` from the deciding trusted row when it has them.
+    """
     if combined is None:
         return {"combined": "unknown", "basis": "none", "providers": {}}
     out: dict[str, Any] = {
@@ -126,6 +148,13 @@ def _verdict(rows: Sequence[Row], combined: Combined | None) -> dict[str, Any]:
         out["contested"] = True
     if combined.basis == "trusted" and len(combined.commits) == 1:
         out["commit"] = combined.commits[0]
+    row = deciding_row(rows, combined)
+    if row is not None and row.criteria is not None:
+        crit = obj(row.criteria)
+        out["criteria"] = {k: list(dict.fromkeys(strs(crit.get(k)))) for k in ("checked", "failed")}
+    risk = _risk(row) if row is not None else None
+    if risk is not None:
+        out["risk"] = risk
     return out
 
 
@@ -144,6 +173,8 @@ def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent source
     entry: dict[str, Any] = {
         "id": plugin.id,
         "name": plugin.name[:200],
+        "ini": _str(raw, "initials", 4),
+        "accent": _str(raw, "accent", 32),
         "author": _str(raw, "author", 200),
         "desc": _str(raw, "description", 1000),
         "cat": _str(raw, "category", 64),
@@ -164,7 +195,7 @@ def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent source
         "score": (ranked or {}).get("score"),
         "fac": [round(float(x), 1) for x in arr(obj(ranked).get("fac"))],
         "verdict": _verdict(rows, combined),
-        "report": True if combined is not None else None,
+        "report": True,  # publish.write_api writes a detail document for every plugin of a snapshot
         "path": path or None,
         "install": _install(plugin),
         "license": _str(raw, "license", 64),
@@ -238,3 +269,14 @@ def assemble(  # noqa: PLR0913  # why: the snapshot is a join of independent inp
         ],
         "plugins": plugins,
     }
+
+
+def weeks_by_plugin(market: Marketplace, stats: Mapping[str, Any] | None) -> dict[str, list[int | None]]:
+    """Weekly commits (collector `repos[...].weeks`, 52 entries) per plugin id, where known."""
+    repos = obj(obj(stats).get("repos"))
+    out: dict[str, list[int | None]] = {}
+    for p in market.plugins.values():
+        weeks = arr(obj(repos.get(p.repo_key) if p.repo_key else None).get("weeks"))
+        if len(weeks) == WEEKS and all(w is None or (isinstance(w, int) and w >= 0) for w in weeks):
+            out[p.id] = cast("list[int | None]", list(weeks))
+    return out

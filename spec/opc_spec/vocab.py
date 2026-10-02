@@ -18,6 +18,20 @@ SNAPSHOT_NAMESPACE: Final = "omarchy-plugin-check-snapshot"
 REGISTRY_NAMESPACE: Final = "omarchy-plugin-check-providers"
 """`ssh-keygen -Y sign -n` namespace for providers.json."""
 
+STORE_KIND: Final = "omarchy-plugin-check/store"
+MANIFEST_KIND: Final = "omarchy-plugin-check/store-manifest"
+HOME_KIND: Final = "omarchy-plugin-check/store-home"
+SEARCH_KIND: Final = "omarchy-plugin-check/store-search"
+DETAILS_KIND: Final = "omarchy-plugin-check/store-details"
+BUNDLE_FILES: Final = {
+    "manifest": "store-manifest.json",
+    "home": "store-home.json",
+    "search": "store-search.json",
+    "details": "store-details.json",
+}
+"""The store app's client bundle (ADR-0032), next to store.json. Only the manifest is signed (with
+SNAPSHOT_NAMESPACE); it carries the sha256 of the others, and `kind` keeps the two documents apart."""
+
 Verdict = Literal["safe", "caution", "risky", "blocked", "unknown"]
 VERDICTS: Final[tuple[Verdict, ...]] = ("safe", "caution", "risky", "blocked")
 """Known verdicts, least to most severe. `unknown` is outside the order: it never wins a worst-of."""

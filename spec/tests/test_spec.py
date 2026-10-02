@@ -65,6 +65,20 @@ def test_vocab_matches_schema_enums():
     assert common["verdict"]["enum"] == [*vocab.VERDICTS, "unknown"]
 
 
+def test_bundle_kinds_match_schemas():
+    for name, kind in (
+        ("store", vocab.STORE_KIND),
+        ("store-manifest", vocab.MANIFEST_KIND),
+        ("store-home", vocab.HOME_KIND),
+        ("store-search", vocab.SEARCH_KIND),
+        ("store-details", vocab.DETAILS_KIND),
+    ):
+        assert schemas.schema(name)["properties"]["kind"]["const"] == kind
+    search = schemas.schema("store-search")["properties"]["dict"]["properties"]
+    assert search["verdict"]["const"] == [*vocab.VERDICTS, "unknown"]
+    assert set(vocab.BUNDLE_FILES) == {"manifest", "home", "search", "details"}
+
+
 def test_categories_match_report_findings_vocabulary():
     findings = json.loads((ROOT.parent / "schemas" / "findings.schema.json").read_text())
     assert tuple(findings["$defs"]["category"]["enum"]) == vocab.CATEGORIES
