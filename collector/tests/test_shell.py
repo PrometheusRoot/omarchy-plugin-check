@@ -181,7 +181,7 @@ def test_inputs_refs_seeds_items():
         ]
     )
     assert seeds["o/r"] == [(dt.date(2026, 9, 30), 9), (dt.date(2026, 10, 1), 3)]
-    index = {"plugins": [{"id": "a", "verdict": "caution", "basis": "trusted", "quality": 80}]}
+    index = {"plugins": [{"id": "a", "verdict": "caution", "basis": "trusted"}]}
     items = {
         i.id: i
         for i in inputs.items(
@@ -189,13 +189,12 @@ def test_inputs_refs_seeds_items():
         )
     }
     a = items["a"]
-    assert (a.stars, a.vel30, a.resp_h, a.views, a.verified, a.quality, a.verdict, a.trusted) == (
+    assert (a.stars, a.vel30, a.resp_h, a.views, a.verified, a.verdict, a.trusted) == (
         11,
         2,
         3.5,
         9,
         True,
-        80,
         "caution",
         True,
     )

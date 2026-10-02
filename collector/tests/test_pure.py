@@ -207,7 +207,6 @@ ITEMS = st.builds(
     resp_h=st.one_of(st.none(), st.floats(0, 10_000)),
     views=st.integers(0, 10**6),
     verified=st.booleans(),
-    quality=st.one_of(st.none(), st.integers(0, 100)),
     verdict=st.sampled_from(["safe", "caution", "risky", "blocked", "unknown"]),
     trusted=st.booleans(),
     listed_at=st.one_of(st.none(), st.sampled_from(["2026-07-01", "2026-09-01"])),
@@ -261,7 +260,7 @@ def test_gates_order(item):
 
 
 def test_factor_table_and_examples():
-    assert [f["weight"] for f in rank.factor_table()] == [20, 15, 10, 10, 8, 7, 7, 10, 5, 8]
+    assert [f["weight"] for f in rank.factor_table()] == [22, 16, 11, 11, 8, 8, 8, 11, 5]
     assert rank.MAX_SCORE == 100
     a = rank.Item(
         "a",
@@ -274,7 +273,6 @@ def test_factor_table_and_examples():
         resp_h=1,
         views=100000,
         verified=True,
-        quality=100,
         verdict="safe",
         trusted=True,
     )
@@ -282,5 +280,5 @@ def test_factor_table_and_examples():
     assert r.score == pytest.approx(100, abs=0.01)
     assert rank.gate_state(rank.Item("x", verdict="risky")) == "unreviewed"
     b = rank.Item("b")
-    assert rank.contributions(b, NOW)[6] == 7 * rank.NEUTRAL  # unknown issue response is neutral
+    assert rank.contributions(b, NOW)[6] == 8 * rank.NEUTRAL  # unknown issue response is neutral
     assert rank._clamp(float("nan")) == 0

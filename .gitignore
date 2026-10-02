@@ -26,3 +26,6 @@ mutants/
 .coverage
 .hypothesis/
 .ruff_cache/
+
+# Claude Code agent worktrees
+.claude/worktrees/

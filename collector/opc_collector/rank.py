@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     import datetime as dt
     from collections.abc import Callable, Sequence
 
-VERSION: Final = "ranking-v1"
+VERSION: Final = "ranking-v2"
 SHELF_SIZE: Final = 50
 CATEGORY_SHELF_SIZE: Final = 30
 NEUTRAL: Final = 0.5
@@ -37,7 +37,6 @@ class Item:
     resp_h: float | None = None
     views: int = 0
     verified: bool = False
-    quality: int | None = None
     verdict: str = "unknown"
     """Combined verdict; only meaningful when `trusted`."""
     trusted: bool = False
@@ -76,21 +75,22 @@ def _issues(i: Item, _now: dt.datetime) -> float:
 
 
 FACTORS: Final[tuple[Factor, ...]] = (
-    Factor("stars", "log(stars)", 20, lambda i, _n: math.log10(1 + i.stars) / math.log10(2100)),
-    Factor("velocity", "★ velocity 30d", 15, lambda i, _n: math.log(1 + i.vel30) / math.log(401)),
-    Factor("recency", "commit recency", 10, _recency),
-    Factor("commits", "commits 90d", 10, lambda i, _n: (i.c90 or 0) / 60),
+    Factor("stars", "log(stars)", 22, lambda i, _n: math.log10(1 + i.stars) / math.log10(2100)),
+    Factor("velocity", "★ velocity 30d", 16, lambda i, _n: math.log(1 + i.vel30) / math.log(401)),
+    Factor("recency", "commit recency", 11, _recency),
+    Factor("commits", "commits 90d", 11, lambda i, _n: (i.c90 or 0) / 60),
     Factor("contrib", "contributors", 8, lambda i, _n: ((i.contrib or 1) - 1) / 5),
-    Factor("releases", "release cadence", 7, lambda i, _n: (i.rel180 or 0) / 4),
-    Factor("issues", "issue response", 7, _issues),
-    Factor("engage", "marketplace engagement", 10, lambda i, _n: math.log(1 + i.views) / math.log(100001)),
+    Factor("releases", "release cadence", 8, lambda i, _n: (i.rel180 or 0) / 4),
+    Factor("issues", "issue response", 8, _issues),
+    Factor("engage", "marketplace engagement", 11, lambda i, _n: math.log(1 + i.views) / math.log(100001)),
     Factor("verif", "marketplace verification", 5, lambda i, _n: 1.0 if i.verified else 0.3),
-    Factor("quality", "quality score", 8, lambda i, _n: NEUTRAL if i.quality is None else i.quality / 100),
+    # why: no factor or gate rewards OUR review status - we publish this ranking and also run a
+    # provider, so review coverage must not move plugins up (conflict of interest, ADR-0030).
 )
 GATES: Final[dict[str, float]] = {
     "safe": 1.0,
     "caution": 1.0,
-    "unreviewed": 0.9,
+    "unreviewed": 1.0,
     "risky": 0.6,
     "blocked": 0.0,
 }

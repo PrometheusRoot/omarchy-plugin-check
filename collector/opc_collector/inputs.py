@@ -73,7 +73,6 @@ def items(
                 resp_h=st.get("respH") if isinstance(st.get("respH"), (int, float)) else None,
                 views=integer(obj(engagement.get(p.id)).get("views")) or 0,
                 verified=p.raw.get("verificationStatus") == "verified",
-                quality=integer(v.get("quality")),
                 verdict=text(v.get("verdict")) or "unknown",
                 trusted=v.get("basis") == "trusted",
                 listed_at=text(p.raw.get("listedAt")),
