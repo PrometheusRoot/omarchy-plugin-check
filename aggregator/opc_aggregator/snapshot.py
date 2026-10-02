@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from opc_spec.jsonv import obj, strs
+from opc_spec.jsonv import arr, obj, strs, text
 from opc_spec.marketplace import manifest_dir
 
 from opc_aggregator.model import Combined, Row, iso
@@ -22,7 +22,10 @@ if TYPE_CHECKING:
     from opc_aggregator.marketplace import Marketplace, Plugin
 
 KIND = "omarchy-plugin-check/store"
-IMAGE_BASE = "https://plugins.omarchy.org/"
+IMAGE_BASE = "https://plugins.omarchy.org/assets/img/plugins/"
+IMAGE_PREFIX = "assets/img/plugins/"
+MARKETPLACE_ORIGIN = "https://plugins.omarchy.org/"
+
 GH_KEYS = (
     "stars",
     "vel30",
@@ -39,6 +42,7 @@ GH_KEYS = (
 )
 SHELF_KEYS = ("top", "trending", "new", "updated", "safePicks")
 GALLERY_MAX = 8
+REQUIRED = frozenset({"id", "name", "verdict"})
 
 
 @dataclass(frozen=True)
@@ -64,13 +68,36 @@ def _img(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     out: dict[str, Any] = {}
     if isinstance(thumb, str):
-        out["thumb"] = thumb
+        out["thumb"] = _image_ref(thumb)
     if isinstance(full, str):
-        out["full"] = full
+        out["full"] = _image_ref(full)
     for src, dst in (("previewWidth", "w"), ("previewHeight", "h")):
         if isinstance(raw.get(src), int):
             out[dst] = raw[src]
     return out
+
+
+def _image_ref(path: str) -> str:
+    """Marketplace image path → imageBase-relative name, or an absolute https URL."""
+    if path.startswith("https://"):
+        return path
+    rel = path.lstrip("/")
+    return rel.removeprefix(IMAGE_PREFIX) if rel.startswith(IMAGE_PREFIX) else MARKETPLACE_ORIGIN + rel
+
+
+def _when(raw: Mapping[str, Any], key: str) -> str | None:
+    """Timestamp to the second ('2026-08-20T03:43:03.431Z' → '2026-08-20T03:43:03Z')."""
+    v = _str(raw, key, 40)
+    return v[:19] + "Z" if v and len(v) >= 19 and v[10] == "T" else v
+
+
+def _install(plugin: Plugin) -> str | None:
+    """None = the default `omarchy plugin add <repo>.git --enable`; '' = not installable."""
+    raw = plugin.raw
+    if raw.get("installAvailable") is False:
+        return ""
+    cmd = _str(raw, "installCommand", 300)
+    return None if not cmd or cmd == f"omarchy plugin add {plugin.repo}.git --enable" else cmd
 
 
 def _gh(repo_stats: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -87,15 +114,19 @@ def _gallery(repo_stats: Mapping[str, Any] | None, path: str) -> list[str]:
 
 
 def _verdict(rows: Sequence[Row], combined: Combined | None) -> dict[str, Any]:
+    """Compact verdict: `contested` only if true; `commit` only for a trusted basis at one commit."""
     if combined is None:
-        return {"combined": "unknown", "basis": "none", "contested": False, "commit": None, "providers": {}}
-    return {
+        return {"combined": "unknown", "basis": "none", "providers": {}}
+    out: dict[str, Any] = {
         "combined": combined.verdict,
         "basis": combined.basis,
-        "contested": combined.contested,
-        "commit": combined.commits[0] if len(combined.commits) == 1 else None,
         "providers": {r.provider: r.verdict for r in rows},
     }
+    if combined.contested:
+        out["contested"] = True
+    if combined.basis == "trusted" and len(combined.commits) == 1:
+        out["commit"] = combined.commits[0]
+    return out
 
 
 def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent sources
@@ -121,8 +152,8 @@ def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent source
         "repo": plugin.repo,
         "state": plugin.state,
         "verif": _str(raw, "verificationStatus", 32),
-        "listed": _str(raw, "listedAt", 40),
-        "updated": _str(raw, "repositoryUpdatedAt", 40),
+        "listed": _when(raw, "listedAt"),
+        "updated": _when(raw, "repositoryUpdatedAt"),
         "img": _img(raw),
         "gallery": _gallery(repo_stats, path),
         "gh": _gh(repo_stats),
@@ -131,18 +162,20 @@ def plugin_entry(  # noqa: PLR0913  # why: one row joins five independent source
         else None,
         "rank": (ranked or {}).get("rank"),
         "score": (ranked or {}).get("score"),
-        "fac": list((ranked or {}).get("fac") or []),
+        "fac": [round(float(x), 1) for x in arr(obj(ranked).get("fac"))],
         "verdict": _verdict(rows, combined),
-        "report": f"plugins/{plugin.id}.json" if combined is not None else None,
+        "report": True if combined is not None else None,
+        "path": path or None,
+        "install": _install(plugin),
+        "license": _str(raw, "license", 64),
+        "version": _str(raw, "version", 64),
     }
-    if path:
-        entry["path"] = path
-    install = _str(raw, "installCommand", 300)
-    if install and raw.get("installAvailable", True):
-        entry["install"] = install
-    for key, src in (("license", "license"), ("version", "version")):
-        entry[key] = _str(raw, src, 64)
-    return entry
+    return {k: v for k, v in entry.items() if k in REQUIRED or not _empty(k, v)}
+
+
+def _empty(key: str, value: object) -> bool:
+    """Dropped to keep store.json compact: absent = null, [], or (state) listed."""
+    return value is None or value == [] or (key == "state" and value == "listed")
 
 
 def assemble(  # noqa: PLR0913  # why: the snapshot is a join of independent inputs
@@ -171,7 +204,8 @@ def assemble(  # noqa: PLR0913  # why: the snapshot is a join of independent inp
         for p in sorted(market.plugins.values(), key=lambda p: p.id)
     ]
     states = Counter(p.state for p in market.plugins.values())
-    cats = Counter(e["cat"] for e in plugins if e["cat"] and e["state"] == "listed")
+    listed = [p for p in market.plugins.values() if p.state == "listed"]
+    cats = Counter(c for c in (text(p.raw.get("category")) for p in listed) if c)
     shelves = cast("Mapping[str, Any]", (ranking or {}).get("shelves") or {})
     return {
         "schemaVersion": 1,

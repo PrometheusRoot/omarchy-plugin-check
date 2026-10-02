@@ -5,10 +5,11 @@ from pathlib import Path
 
 import pytest
 from opc_spec import schemas
+from opc_spec.marketplace import Plugin
 
 from opc_aggregator import build, cli, publish, snapshot, sshsig
 from opc_aggregator.fetch import HttpsFetcher, LocalFetcher, RoutingFetcher
-from opc_aggregator.model import parse_provider
+from opc_aggregator.model import Combined, parse_provider
 from opc_aggregator.ports import VerificationError, Verified
 from opc_aggregator.state import State
 from opc_aggregator.unsigned import UnsignedDevVerifier
@@ -239,32 +240,34 @@ def test_snapshot_assemble(tmp_path):
     clock = by["example.clock"]
     assert clock["gh"]["stars"] == 10
     assert clock["gallery"] == ["https://raw.githubusercontent.com/example/clock/main/a.png"]
+    assert clock["listed"] == "2026-09-01T00:00:00Z"
+    assert "state" not in clock
     assert clock["img"] == {
-        "thumb": "assets/img/c.webp",
-        "full": "assets/img/c-full.webp",
+        "thumb": "https://plugins.omarchy.org/assets/img/c.webp",
+        "full": "c-full.webp",
         "w": 1600,
         "h": 900,
     }
     assert clock["verdict"] == {
         "combined": "caution",
         "basis": "trusted",
-        "contested": False,
         "commit": C1,
         "providers": {"example": "caution", "marketplace": "safe"},
     }
     assert (clock["rank"], clock["report"], clock["install"]) == (
         1,
-        "plugins/example.clock.json",
+        True,
         "omarchy plugin add https://github.com/example/clock.git",
     )
     suite = by["example.suite-a"]
     assert suite["path"] == "plugins/a"
     assert suite["gallery"] == ["https://raw.githubusercontent.com/example/suite/main/plugins/a/s.png"]
-    assert "install" not in suite
-    assert suite["gh"] is None
-    assert suite["img"] is None
+    assert suite["install"] == ""
+    assert "gh" not in suite
+    assert "img" not in suite
     assert by["omarchy.weather"]["verdict"]["combined"] == "unknown"
-    assert by["omarchy.weather"]["report"] is None
+    assert "report" not in by["omarchy.weather"]
+    assert by["omarchy.weather"]["state"] == "builtin"
     assert doc["catalog"] == {
         "generatedAt": "2026-10-01T00:00:00.000Z",
         "plugins": 4,
@@ -396,3 +399,19 @@ def test_verifiers_factory():
     v = cli._verifiers(offline=True)
     assert set(v) == {"sigstore", "none"}
     assert Path(cli.DEV_KEY).name == "dev-snapshot-key"
+
+
+def test_snapshot_row_compaction_edges():
+    raw = {
+        "id": "x.y",
+        "previewImage": "https://cdn.example/full.webp",
+        "listedAt": "2026-09-01",
+        "installCommand": "omarchy plugin add https://github.com/x/y.git --enable",
+    }
+    plugin = Plugin("x.y", "X", "https://github.com/x/y", "x/y", "listed", raw)
+    combined = Combined("risky", "trusted", True, ("a" * 40, "b" * 40), ("r",))
+    row = snapshot.plugin_entry(plugin, [], combined, repo_stats=None, engagement=None, ranked=None)
+    assert row["img"] == {"full": "https://cdn.example/full.webp"}
+    assert row["listed"] == "2026-09-01"
+    assert "install" not in row  # the default command is implied
+    assert row["verdict"] == {"combined": "risky", "basis": "trusted", "providers": {}, "contested": True}

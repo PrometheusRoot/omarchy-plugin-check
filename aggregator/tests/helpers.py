@@ -30,7 +30,7 @@ def catalog() -> dict[str, Any]:
                 "listedAt": "2026-09-01T00:00:00.000Z",
                 "repositoryUpdatedAt": "2026-09-20T00:00:00Z",
                 "previewThumbnail": "assets/img/c.webp",
-                "previewImage": "assets/img/c-full.webp",
+                "previewImage": "assets/img/plugins/c-full.webp",
                 "previewWidth": 1600,
                 "previewHeight": 900,
                 "installCommand": "omarchy plugin add https://github.com/example/clock.git",
