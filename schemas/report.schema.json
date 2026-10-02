@@ -521,13 +521,27 @@
         "guard": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["canaryOk", "positiveControlOk", "disallowedToolUse", "schemaValid"],
+          "required": ["canaryOk", "positiveControlOk", "disallowedToolUse", "schemaValid", "failures"],
           "description": "null = check not run.",
           "properties": {
             "canaryOk": { "type": ["boolean", "null"] },
             "positiveControlOk": { "type": ["boolean", "null"] },
             "disallowedToolUse": { "type": ["boolean", "null"] },
-            "schemaValid": { "type": ["boolean", "null"] }
+            "schemaValid": { "type": ["boolean", "null"] },
+            "failures": {
+              "type": "array",
+              "description": "Why a pass produced no trusted output (ADR-0022); [] when every pass that ran succeeded.",
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pass", "reason"],
+                "properties": {
+                  "pass": { "enum": [1, 2] },
+                  "reason": { "enum": ["guard", "auth", "timeout", "budget", "max-turns", "schema", "error"] }
+                }
+              }
+            }
           }
         }
       }
