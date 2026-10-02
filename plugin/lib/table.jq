@@ -27,6 +27,10 @@ def prov($p): [$p | to_entries[] | .key + (if .value == "safe" then G("ok") | c(
          else prov(.providers) end)
       + (if .contested then " " + ("⚑contested" | c("risky")) else "" end)),
     "",
+    (.plugins[] | select(.repin != null) | " " + (G("commit") | c("stale")) + " "
+      + (if .repin == "forward" then "\(.id): reviewed update to \(.reviewed.commit | sha7)"
+         else "\(.id): HEAD \(.head | sha7) is past the review; back to \(.reviewed.commit | sha7)" end)
+      + " · " + ("omarchy-plugin-check pin \(.listedId)" | c("bold"))),
     " " + ([(.plugins | length | "\(.) plugins")] + [(.counts | to_entries | sort_by(-(.key | state_rank))[] | select(.key != "safe") | "\(.value) \(.key)")] | join(" · ")),
     " " + ("c = commit match · t = tree match (installed vs reviewed) · state worst first" | c("dim")),
     " " + (.snapshot | if .ok then (G("ok") + " snapshot verified" | c("ok")) + " · \(($now - (.generatedAt | iso_to_epoch)) | age) old · version \(.version)" + (if .dev then " · dev key" else "" end)

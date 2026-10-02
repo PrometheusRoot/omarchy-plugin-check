@@ -68,7 +68,8 @@ make_snapshot() {
   tree=$(remote_tree test/safe-clock)
   caution=$(remote_commit test/caution-mail)
   mkdir -p -- "${SNAP}/api/v1/plugins"
-  sed -e "s/@SAFE_COMMIT@/${safe}/g" -e "s/@CAUTION_COMMIT@/${caution}/g" "${TESTS}/fixtures/store.json" \
+  sed -e "s/@SAFE_COMMIT@/${safe}/g" -e "s/@CAUTION_COMMIT@/${caution}/g" \
+    -e "s/@SAFE_TREE@/${SAFE_TREE_OVERRIDE:-${tree}}/g" "${TESTS}/fixtures/store.json" \
     | jq --argjson v "${version}" --arg e "${expires}" --argjson dev "${dev}" --arg g "$(date -u -d '-1 hour' +%FT%TZ)" \
       '.version = $v | .expires = $e | .dev = $dev | .generatedAt = $g' > "${SNAP}/store.json"
   for f in "${TESTS}"/fixtures/api/*.json; do

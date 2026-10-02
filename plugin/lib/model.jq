@@ -38,7 +38,7 @@ include "opc";
     reviewed: {commit: $reviewed, commits: $rev.commits, tree: $rev.tree, signed: $rev.signed},
     upstream: {head: $upstream.head, error: $upstream.error, eq: ($upstream.head != null and $reviewed != null and $upstream.head == $reviewed)},
     local: (if $local.installed then {
-      head: $local.head, tree: $local.tree, dir: $local.dir, origin: $local.origin,
+      head: $local.head, tree: $local.tree, dir: $local.dir, origin: $local.origin, moved: ($local.moved == true),
       commitEq: ($local.head != null and ($rev.commits | index($local.head)) != null),
       treeEq: (if $rev.tree == null or $local.tree == null then null else $local.tree == $rev.tree end)
     } else null end),

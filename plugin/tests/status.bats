@@ -91,3 +91,52 @@ state_of() { jq -r --arg d "$1" '.plugins[] | select(.dir | endswith("/" + $d)) 
   [ "${status}" -eq 0 ]
   echo "${output}" | jq -e '.plugins == [] and .worst == null'
 }
+
+@test "a checkout from a former repository is the listing, moved; a fork reusing the id is not" {
+  checkout test/safe-clock test.safe-clock https://github.com/test/old-clock.git
+  make_remote evil/old-clock test.safe-clock
+  checkout evil/old-clock fork https://github.com/evil/old-clock.git
+  run "${CLI}" status
+  [ "${status}" -eq 0 ]
+  [ "$(state_of test.safe-clock)" = safe ]
+  [ "$(state_of fork)" = unlisted ]
+  [[ ${output} == *"moved: listed at github.com/test/safe-clock; origin is its former repository"* ]]
+  run jq -r '.plugins[] | select(.id == "test.safe-clock" and (.dir | endswith("/test.safe-clock")))
+    | "\(.listedId) \(.moved) \(.repo) \(.commitMatch) \(.treeMatch)"' "${HOME}/.cache/omarchy-plugin-check/status.json"
+  [ "${output}" = "test.safe-clock true https://github.com/test/safe-clock true true" ]
+  # the card says so too
+  run "${CLI}" test.safe-clock
+  [[ ${output} == *"moved: origin github.com/test/old-clock is a former name of the listed repository"* ]]
+}
+
+@test "repin: forward when the reviewed commit is newer (or not fetched yet), back when HEAD is past it" {
+  local old
+  old=$(remote_commit test/safe-clock)
+  move_upstream test/safe-clock
+  make_snapshot 1001
+  "${CLI}" update "file://${SNAP}/store.json" > /dev/null
+  # behind: the reviewed commit is in the checkout, HEAD is its parent
+  checkout test/safe-clock test.safe-clock
+  git -C "${P}/test.safe-clock" -c advice.detachedHead=false checkout -q "${old}"
+  # not fetched: cloned before the reviewed commit existed
+  git clone -q "${FAKE_REMOTES}/test/caution-mail.git" "${P}/test.caution-mail"
+  git -C "${P}/test.caution-mail" remote set-url origin https://github.com/test/caution-mail.git
+  move_upstream test/caution-mail
+  make_snapshot 1002
+  "${CLI}" update "file://${SNAP}/store.json" > /dev/null
+  run "${CLI}" status
+  [ "${status}" -eq 0 ]
+  [[ ${output} == *"test.safe-clock: reviewed update to $(remote_commit test/safe-clock | cut -c1-7) · omarchy-plugin-check pin test.safe-clock"* ]]
+  run jq -r '[.plugins[] | "\(.id)=\(.repin)"] | sort | join(" ")' "${HOME}/.cache/omarchy-plugin-check/status.json"
+  [ "${output}" = "test.caution-mail=forward test.safe-clock=forward" ]
+  # ahead: HEAD is a local commit past the review
+  git -C "${P}/test.safe-clock" checkout -q main
+  printf 'x\n' >> "${P}/test.safe-clock/Widget.qml"
+  git -C "${P}/test.safe-clock" commit -q -am local
+  run "${CLI}" status --json
+  [ "$(jq -r '.plugins[] | select(.id == "test.safe-clock") | .repin' <<< "${output}")" = back ]
+  # at the reviewed commit: nothing to do
+  git -C "${P}/test.safe-clock" reset -q --hard "$(remote_commit test/safe-clock)"
+  run "${CLI}" status --json
+  [ "$(jq -r '.plugins[] | select(.id == "test.safe-clock") | "\(.state) \(.repin)"' <<< "${output}")" = "safe null" ]
+}

@@ -14,6 +14,7 @@ set -Eeuo pipefail
 shopt -s nullglob
 
 readonly VERSION="0.1.0"
+readonly INDEX_FORMAT=2 # bump when lib/index.jq changes shape: rebuilds cached indexes
 self=$(readlink -f -- "${BASH_SOURCE[0]}")
 root=$(cd -- "$(dirname -- "${self}")/.." && pwd)
 lib="${root}/lib"
@@ -130,11 +131,11 @@ verify() {
   fi
   sha=$(sha256sum < "${dir}/store.json")
   sha=${sha%% *}
-  if [[ "$(jq -r '.sha // empty' "${cache}/meta.json" 2> /dev/null || true)" == "${sha}" ]]; then
+  if [[ "$(jq -r --argjson idx "${INDEX_FORMAT}" 'select(.idx == $idx) | .sha // empty' "${cache}/meta.json" 2> /dev/null || true)" == "${sha}" ]]; then
     cp -- "${cache}/meta.json" "${tmp}/meta.json"
   else
-    jq -c --arg sha "${sha}" '{sha: $sha, kind, schemaVersion, version, generatedAt, expires, dev,
-      plugins: (.plugins | length)}' "${dir}/store.json" > "${tmp}/meta.json"
+    jq -c --arg sha "${sha}" --argjson idx "${INDEX_FORMAT}" '{sha: $sha, idx: $idx, kind, schemaVersion, version,
+      generatedAt, expires, dev, plugins: (.plugins | length)}' "${dir}/store.json" > "${tmp}/meta.json"
   fi
   accept omarchy-plugin-check/store "${tmp}/meta.json" "${min}"
 }
@@ -292,7 +293,7 @@ installed_for() { # installed_for ROW-JSON -> local json of the matching checkou
     d=${d%/}
     local_json "${d}"
   done | J -c -s --argjson row "$1" 'include "opc";
-    (map(select(.origin != null and (.origin | repo_key) == ($row.repo | repo_key)))
+    (map(select(origin_of($row)) | .moved = moved_from($row))
      | (map(select(.id == $row.id)) + .) | first) // {installed: false}'
 }
 
@@ -509,6 +510,22 @@ log_change() { # log_change ID URL SHA PINNED
   cat -- "${tmp}/changes.md" > "${changes_md}"
 }
 
+relation() { # relation DIR COMMIT -> behind | ahead | diverged | nothing (COMMIT not in DIR yet)
+  gitq "$1" cat-file -e "$2^{commit}" || return 0
+  if gitq "$1" merge-base --is-ancestor HEAD "$2"; then
+    echo behind
+  elif gitq "$1" merge-base --is-ancestor "$2" HEAD; then
+    echo ahead
+  else
+    echo diverged
+  fi
+}
+
+status_doc() { # status_doc SNAP REL -> ${tmp}/status.json
+  J --slurpfile local "${tmp}/local.json" --slurpfile details "${tmp}/details.json" --argjson snap "$1" \
+    --argjson rel "$2" -f "${lib}/status.jq" "$([[ ${snap_ok} == 1 ]] && echo "${index}" || echo "${tmp}/index.json")" > "${tmp}/status.json"
+}
+
 cmd_status() {
   local json=0 d details=() snap
   if [[ ${1:-} == --json ]]; then json=1; fi
@@ -527,8 +544,15 @@ cmd_status() {
   snap=$(jq -n -c --argjson ok "$([[ ${snap_ok} == 1 ]] && echo true || echo false)" --arg err "${snap_error}" \
     --arg url "$(source_url)" '{ok: $ok, error: (if $ok then null else $err end), url: $url, now: (now | floor)}')
   cat /dev/null "${details[@]}" > "${tmp}/details.json"
-  J --slurpfile local "${tmp}/local.json" --slurpfile details "${tmp}/details.json" --argjson snap "${snap}" \
-    -f "${lib}/status.jq" "$([[ ${snap_ok} == 1 ]] && echo "${index}" || echo "${tmp}/index.json")" > "${tmp}/status.json"
+  status_doc "${snap}" '{}'
+  # Where each stale checkout stands relative to its reviewed commit (local objects only).
+  local dir commit rel=""
+  while IFS=$'\t' read -r dir commit; do
+    rel+="${dir}"$'\t'"$(relation "${dir}" "${commit}")"$'\n'
+  done < <(jq -r '.plugins[] | select(.repin != null) | "\(.dir)\t\(.reviewed.commit)"' "${tmp}/status.json")
+  if [[ -n ${rel} ]]; then
+    status_doc "${snap}" "$(jq -R -n -c '[inputs | split("\t") | select(.[1] != "") | {key: .[0], value: .[1]}] | from_entries' <<< "${rel%$'\n'}")"
+  fi
   mv -f -- "${tmp}/status.json" "${cache}/status.json"
   if [[ ${json} == 1 ]]; then
     cat -- "${cache}/status.json"

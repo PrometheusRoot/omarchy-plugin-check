@@ -50,13 +50,26 @@ q() { jq -n -r -L "${ROOT}/lib" "include \"opc\"; $1"; }
   [ "$(q '[] | worst_state')" = null ]
 }
 
-@test "reviewed: signed commit first; the unsigned view only adds a tree for a counted trusted row" {
-  local row='{"id":"p","verdict":{"basis":"trusted","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
+@test "reviewed: signed commit and tree from the snapshot; the unsigned view never supplies a tree" {
+  local row='{"id":"p","verdict":{"basis":"trusted","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tree":"3333333333333333333333333333333333333333"}}'
   local view='{"combined":{"commits":["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]},"providers":[
-    {"tier":"community","counted":true,"commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tree":"1111111111111111111111111111111111111111"},
     {"tier":"core","counted":true,"commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tree":"2222222222222222222222222222222222222222"}]}'
   run q "reviewed(${row}; ${view}) | \"\(.commits | join(\",\")) \(.tree) \(.signed)\""
-  [ "${output}" = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2222222222222222222222222222222222222222 true" ]
+  [ "${output}" = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 3333333333333333333333333333333333333333 true" ]
+  # no signed tree: none, whatever the view says
+  run q "reviewed(${row} | del(.verdict.tree); ${view}) | .tree"
+  [ "${output}" = null ]
+  # no signed commit: the view's commits, display only, no tree
+  run q "reviewed(${row} | del(.verdict.commit); ${view}) | \"\(.commits | join(\",\")) \(.tree) \(.signed)\""
+  [ "${output}" = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb null false" ]
+}
+
+@test "repo_keys / moved_from: former repositories identify the listing (ADR-0034)" {
+  local row='{"id":"p","repo":"https://github.com/new/name","formerRepos":["https://github.com/old/name"]}'
+  [ "$(q "{origin: \"git@github.com:Old/Name.git\"} | [origin_of(${row}), moved_from(${row})] | join(\" \")")" = "true true" ]
+  [ "$(q "{origin: \"https://github.com/new/name\"} | [origin_of(${row}), moved_from(${row})] | join(\" \")")" = "true false" ]
+  [ "$(q "{origin: \"https://github.com/evil/name\"} | [origin_of(${row}), moved_from(${row})] | join(\" \")")" = "false false" ]
+  [ "$(q "{origin: null} | origin_of(${row})")" = false ]
 }
 
 @test "menu.jq: comma added after a last entry without one; markers removed cleanly" {
@@ -79,4 +92,12 @@ q() { jq -n -r -L "${ROOT}/lib" "include \"opc\"; $1"; }
   printf '# Log\n' > "${f}"
   run jq -R -s -j --arg date 2026-10-02 --arg entry '### Only' -f "${ROOT}/lib/changes.jq" "${f}"
   [ "${output}" = $'# Log\n\n## 2026-10-02\n\n### Only' ]
+}
+
+@test "index.jq: a former repository resolves to its listing but never shadows a current one" {
+  local doc='{"providers":[],"plugins":[
+    {"id":"a","repo":"https://github.com/o/a","formerRepos":["https://github.com/o/a-old","https://github.com/o/b"]},
+    {"id":"b","repo":"https://github.com/o/b"}]}'
+  run jq -c -L "${ROOT}/lib" --arg sha x -f "${ROOT}/lib/index.jq" <<< "${doc}"
+  [ "$(jq -c .repos <<< "${output}")" = '{"github.com/o/a":["a"],"github.com/o/b":["b"],"github.com/o/a-old":["a"]}' ]
 }

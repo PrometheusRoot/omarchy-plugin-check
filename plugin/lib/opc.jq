@@ -30,9 +30,9 @@ def worst_state: if length == 0 then null else max_by(state_rank) end;
 
 def marketplace_url: "https://plugins.omarchy.org/plugin.html?id=" + (@uri);
 
-# What was reviewed for one snapshot row: the signed commit (snapshot) or, failing that,
-# the commits of the unsigned per-plugin view; the tree only from the view, and only for
-# a counted core/verified row of a reviewed commit. $detail must already belong to $row.
+# What was reviewed for one snapshot row: the signed commit and tree (store.json
+# verdict.commit / verdict.tree, ADR-0034) or, failing that, the commits of the unsigned
+# per-plugin view (display only: no tree). $detail must already belong to $row.
 def reviewed($row; $detail):
   ([$row.verdict.commit | select(is_sha)]) as $signed
   | (if ($signed | length) > 0 then $signed
@@ -41,11 +41,14 @@ def reviewed($row; $detail):
   | {
       commits: $commits,
       signed: (($signed | length) > 0),
-      tree: ([($detail.providers // [])[]
-              | select(.counted == true and (.tier == "core" or .tier == "verified"))
-              | select(.commit as $c | $commits | index($c))
-              | .tree | select(is_sha)] | first)
+      tree: (if ($signed | length) > 0 then ($row.verdict.tree | select(is_sha)) // null else null end)
     };
+
+# Repository keys that identify a listing: its repository and its former names (renames,
+# ADR-0034). `moved_from($row)`: true when the origin key is a former name, not the current one.
+def repo_keys($row): [($row.repo | repo_key)] + [($row.formerRepos // [])[] | repo_key] | map(select(. != null));
+def origin_of($row): (.origin | repo_key) as $k | $k != null and (repo_keys($row) | index($k)) != null;
+def moved_from($row): (.origin | repo_key) as $k | $k != null and $k != ($row.repo | repo_key) and (repo_keys($row) | index($k)) != null;
 
 # State of an installed (or about-to-be-installed) plugin.
 #   $row: snapshot row or null · $local: {head, tree} (nulls allowed) · $rev: reviewed(...)

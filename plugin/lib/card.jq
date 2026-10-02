@@ -45,7 +45,8 @@ def commit_line:
 
 def local_line:
   (.local.head | sha7 | c("sha")) + "  commit " + eqmark(.local.commitEq) + "  tree " + eqmark(.local.treeEq)
-  + (if .local.commitEq == false and .local.treeEq == true then "  (same content)" | c("dim") else "" end);
+  + (if .local.commitEq == false and .local.treeEq == true then "  (same content)" | c("dim") else "" end)
+  + (if .local.moved then "  " + ("moved: origin \(.local.origin | repo_key) is a former name of the listed repository" | c("dim")) else "" end);
 
 def headline:
   (.state | st) + "  "

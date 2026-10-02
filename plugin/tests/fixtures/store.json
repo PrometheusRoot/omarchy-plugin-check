@@ -17,8 +17,8 @@
   "categories": [],
   "plugins": [
     {"id": "test.safe-clock", "name": "Safe Clock", "author": "test", "cat": "Widgets", "kind": "Bar widget", "license": "MIT",
-     "repo": "https://github.com/test/safe-clock",
-     "verdict": {"combined": "safe", "basis": "trusted", "providers": {"opc": "safe", "marketplace": "safe"}, "commit": "@SAFE_COMMIT@"}, "report": true},
+     "repo": "https://github.com/test/safe-clock", "formerRepos": ["https://github.com/test/old-clock"],
+     "verdict": {"combined": "safe", "basis": "trusted", "providers": {"opc": "safe", "marketplace": "safe"}, "commit": "@SAFE_COMMIT@", "tree": "@SAFE_TREE@"}, "report": true},
     {"id": "test.caution-mail", "name": "Caution Mail", "repo": "https://github.com/test/caution-mail",
      "verdict": {"combined": "caution", "basis": "trusted", "providers": {"opc": "caution"}, "commit": "@CAUTION_COMMIT@"}, "report": true},
     {"id": "io.github.example-fixtures.blocked-widget", "name": "Weather Pro", "repo": "https://github.com/example-fixtures/blocked-widget",

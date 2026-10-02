@@ -53,7 +53,11 @@ with `OPC_DEV_KEYS=1 OPC_DEV_SIGNERS=<path to allowed_signers.dev>`.
 | blocked | a trusted reviewer found blocking evidence; `--add` refuses it |
 | unreviewed | no trusted review (only the unsigned marketplace baseline, or nothing) |
 | stale | your commit and tree differ from the reviewed ones |
-| unlisted | not on plugins.omarchy.org, or your checkout's origin is not the listed repository |
+| unlisted | not on plugins.omarchy.org, or your checkout's origin is neither the listed repository nor one of its former names |
+
+A checkout whose `origin` is a former name of the listed repository (a rename the marketplace
+records in `repositoryMigrations`) keeps that listing and is marked *moved*. Commit and tree are
+compared with the signed `verdict.commit` / `verdict.tree` of the snapshot (ADR-0034).
 | retired | removed from the marketplace; no verdict is computed |
 
 ## Environment
