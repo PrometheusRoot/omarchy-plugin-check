@@ -96,9 +96,11 @@ setup() {
 
 @test "a cached snapshot that expires later stops being trusted" {
   trust_as_dev
-  make_snapshot 1000 "$(date -u -d '+3 seconds' +%FT%TZ)"
+  # why: 8 s of headroom; `update` verifies twice and took over 3 s on a loaded machine.
+  local until=$(($(date +%s) + 8))
+  make_snapshot 1000 "$(date -u -d "@${until}" +%FT%TZ)"
   "${CLI}" update "file://${SNAP}/store.json"
-  sleep 4
+  sleep $((until - $(date +%s) + 1))
   run "${CLI}" test.safe-clock
   [ "${status}" -eq 4 ]
   [[ ${output} == *"expired"* ]]
