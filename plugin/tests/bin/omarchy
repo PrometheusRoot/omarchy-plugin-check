@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Fake `omarchy` for the bats tests: records every call in $FAKE_LOG and imitates the
+# plugin subcommands the checker uses, cloning "github" URLs from $FAKE_REMOTES.
+set -Eeuo pipefail
+printf 'omarchy %s\n' "$*" >> "${FAKE_LOG:?}"
+plugins="${HOME}/.config/omarchy/plugins"
+case "${1:-} ${2:-}" in
+  "plugin add")
+    url=$3
+    case ${url} in
+      https://github.com/*) src="${FAKE_REMOTES:?}/${url#https://github.com/}" ;;
+      file://*) src=${url#file://} ;;
+      *) src=${url} ;;
+    esac
+    stage="${plugins}/.add.tmp.$$"
+    git clone -q -- "${src%.git}.git" "${stage}" 2> /dev/null || git clone -q -- "${src}" "${stage}"
+    git -C "${stage}" remote set-url origin "${url}"
+    id=$(jq -r .id "${stage}/manifest.json")
+    mv -- "${stage}" "${plugins}/${id}"
+    echo "Added ${id}"
+    ;;
+  "plugin validate") [[ -f ${3}/manifest.json ]] ;;
+  "plugin enable") : ;;
+  "plugin remove") rm -rf -- "${plugins:?}/${3:?}" ;;
+  *) exit 0 ;;
+esac

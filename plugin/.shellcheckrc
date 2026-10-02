@@ -1,0 +1,8 @@
+# Bash lane (docs/ENGINEERING.md): every optional check on; each disable carries its why.
+enable=all
+external-sources=true
+# why: jq programs are single-quoted on purpose; their $vars are jq's, not the shell's.
+disable=SC2016
+# why: the CLI is glue around jq and git; a failed substitution yields an empty or invalid
+# value that the next jq call or test rejects, and set -e stays on for every plain command.
+disable=SC2310,SC2312

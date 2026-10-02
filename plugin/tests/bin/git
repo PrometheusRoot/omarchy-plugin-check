@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Fake `git` for the bats tests: `ls-remote` answers from the local fake remotes (or fails
+# with FAKE_LS_REMOTE_FAIL=1); everything else is the real git ($REAL_GIT).
+set -Eeuo pipefail
+if [[ ${1:-} == ls-remote ]]; then
+  [[ ${FAKE_LS_REMOTE_FAIL:-0} != 1 ]] || exit 128
+  printf 'git ls-remote %s\n' "${*:2}" >> "${FAKE_LOG:?}"
+  url=${3:?}
+  repo="${FAKE_REMOTES:?}/${url#https://github.com/}"
+  exec "${REAL_GIT:?}" ls-remote -- "${repo%.git}.git" "${@:4}"
+fi
+exec "${REAL_GIT:?}" "$@"
