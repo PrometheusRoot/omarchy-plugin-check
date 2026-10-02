@@ -1,118 +1,103 @@
-// The store's data service: owns the snapshot model and the search index and answers the
-// UI's messages. It runs inside the WorkerScript (ui/worker.mjs, ADR-0026) so parsing a
-// 5 MB snapshot or a slow keystroke never blocks a frame; node tests drive it directly.
-// Messages and replies are plain JSON-able objects (WorkerScript copies them).
+// The store's data service: owns the search columns and the search index and answers the
+// UI's messages. It runs inside the WorkerScript (ui/worker.mjs, ADR-0031) so parsing the
+// 1.6 MB search file or a slow keystroke never blocks a frame; node tests drive it directly.
+// The home slice is mapped on the GUI thread (lib/data.mjs fromHome) and never comes here
+// (ADR-0032). Messages and replies are plain JSON-able objects (WorkerScript copies them).
 import * as Data from "./data.mjs";
 import * as Search from "./search.mjs";
 
-export var SHELF_SIZE = 12;
 export var PAGE = 60;
 
 export function createService() {
-  return { model: null, idx: null, last: null, lastKey: "" };
+  return { t: null, idx: null, last: null, shelves: {} };
 }
 
-function rows(svc, list, limit) {
+function rows(svc, list, limit, from) {
   var out = [];
-  var plugins = svc.model.plugins;
-  for (var i = 0; i < list.length && out.length < limit; i++) out.push(plugins[list[i]]);
+  for (var i = from || 0; i < list.length && out.length < limit; i++) out.push(Data.record(svc.t, list[i]));
   return out;
-}
-
-// What the first frame needs: hero, shelves, categories, counts, meta. Small (~70
-// records) so the UI can also cache it on disk for the next cold start.
-export function homePayload(svc) {
-  var m = svc.model;
-  var byCat = {};
-  for (var c in m.shelves.byCategory) byCat[c] = rows(svc, m.shelves.byCategory[c], SHELF_SIZE);
-  var cats = {};
-  for (var k = 0; k < m.categories.length; k++) cats[m.categories[k].name] = m.categories[k].count;
-  return {
-    meta: m.meta,
-    counts: m.counts,
-    total: m.plugins.length,
-    catCounts: cats,
-    heroes: rows(svc, m.heroes, 6),
-    shelves: {
-      top: rows(svc, m.shelves.top, SHELF_SIZE),
-      trending: rows(svc, m.shelves.trending, SHELF_SIZE),
-      "new": rows(svc, m.shelves["new"], SHELF_SIZE),
-      updated: rows(svc, m.shelves.updated, SHELF_SIZE),
-      safePicks: rows(svc, m.shelves.safePicks, SHELF_SIZE)
-    },
-    byCategory: byCat
-  };
 }
 
 function now() {
   return Date.now();
 }
 
+function index(svc) {
+  if (!svc.idx) svc.idx = Search.buildIndex(svc.t);
+  return svc.idx;
+}
+
 export function handle(svc, msg) {
   var t0 = now();
   switch (msg.type) {
     case "load": {
-      var snap = JSON.parse(msg.text);
+      // msg.text: store-search.json; msg.imageBase from the home slice; msg.byCategory:
+      // {cat: [ids]} (home shelves, for "similar").
+      var doc = JSON.parse(msg.text);
       var t1 = now();
-      svc.model = Data.fromSnapshot(snap);
+      svc.t = Data.fromSearch(doc, msg.imageBase);
+      svc.shelves = msg.byCategory || {};
       svc.idx = null;
       svc.last = null;
-      var t2 = now();
-      var home = homePayload(svc);
-      return { type: "loaded", home: home, ms: { parse: t1 - t0, map: t2 - t1 } };
+      return { type: "loaded", total: svc.t.n, ms: { parse: t1 - t0, map: now() - t1 } };
     }
     case "index": {
-      svc.idx = Search.buildIndex(svc.model.plugins);
-      var t3 = now();
-      Search.warm(svc.idx, svc.model.plugins);
-      return { type: "indexed", ms: { index: t3 - t0, warm: now() - t3 } };
+      // Searchable from here; single characters are pre-scored afterwards in "warm" chunks.
+      index(svc);
+      return { type: "indexed", ms: { index: now() - t0 } };
+    }
+    case "warm": {
+      var from = msg.from || 0;
+      var chars = Search.WARM_CHARS.slice(from, from + (msg.count || 4));
+      Search.warm(index(svc), chars);
+      var next = from + chars.length;
+      return { type: "warmed", next: next < Search.WARM_CHARS.length ? next : -1, ms: now() - t0 };
     }
     case "search": {
-      if (!svc.idx) svc.idx = Search.buildIndex(svc.model.plugins);
       var installed = msg.installed || {};
-      var r = Search.search(svc.idx, svc.model.plugins, msg.q || "", msg.f || {}, msg.sort || "rank", installed, svc.last);
+      var r = Search.search(index(svc), msg.q || "", msg.f || {}, msg.sort || "rank", installed, svc.last);
       svc.last = r;
       var ms = now() - t0;
       return { type: "results", seq: msg.seq, q: msg.q, count: r.count, words: r.words, ms: ms, rows: rows(svc, r.res, msg.limit || PAGE) };
     }
     case "page": {
       var res = svc.last ? svc.last.res : [];
-      var out = [];
-      for (var i = msg.offset; i < res.length && out.length < (msg.limit || PAGE); i++) out.push(svc.model.plugins[res[i]]);
-      return { type: "page", seq: msg.seq, offset: msg.offset, rows: out };
+      return { type: "page", seq: msg.seq, offset: msg.offset, rows: rows(svc, res, msg.limit || PAGE, msg.offset) };
     }
     case "records": {
       var list = [];
       for (var j = 0; j < (msg.ids || []).length; j++) {
-        var ix = svc.model.byId[msg.ids[j]];
-        if (ix !== undefined) list.push(svc.model.plugins[ix]);
+        var ix = svc.t.byId[msg.ids[j]];
+        if (ix !== undefined) list.push(Data.record(svc.t, ix));
       }
       return { type: "records", tag: msg.tag, rows: list };
     }
     case "browse": {
       // Category grid: top by rank, blocked hidden (approval note), optional kind filter.
-      if (!svc.idx) svc.idx = Search.buildIndex(svc.model.plugins);
-      var order = Search.ordering(svc.idx, svc.model.plugins, "rank");
+      var order = Search.ordering(index(svc), "rank");
+      var t = svc.t;
       var got = [];
       for (var o = 0; o < order.length && got.length < (msg.limit || 30); o++) {
-        var p = svc.model.plugins[order[o]];
-        if (p.cat !== msg.cat || p.verdict === "blocked") continue;
-        if (msg.kind && msg.kind !== "all" && p.kind !== msg.kind) continue;
-        got.push(p);
+        var i = order[o];
+        if (t.cat[i] !== msg.cat || t.verdict[i] === "blocked") continue;
+        if (msg.kind && msg.kind !== "all" && t.kind[i] !== msg.kind) continue;
+        got.push(Data.record(t, i));
       }
       return { type: "browse", cat: msg.cat, kind: msg.kind, rows: got };
     }
     case "similar": {
-      var me = svc.model.byId[msg.id];
-      var cat = me === undefined ? "" : svc.model.plugins[me].cat;
-      var top = svc.model.shelves.byCategory[cat] || [];
+      var me = svc.t.byId[msg.id];
+      var cat = me === undefined ? "" : svc.t.cat[me];
+      var top = svc.shelves[cat] || [];
       var sim = [];
-      for (var s = 0; s < top.length && sim.length < 4; s++) if (top[s] !== me) sim.push(svc.model.plugins[top[s]]);
+      for (var s = 0; s < top.length && sim.length < 4; s++) {
+        var k = svc.t.byId[top[s]];
+        if (k !== undefined && k !== me && svc.t.verdict[k] !== "blocked") sim.push(Data.record(svc.t, k));
+      }
       return { type: "similar", id: msg.id, rows: sim };
     }
     case "bench": {
-      if (!svc.idx) svc.idx = Search.buildIndex(svc.model.plugins);
-      var times = Search.benchKeystrokes(svc.idx, svc.model.plugins, msg.phrases, now, msg.reps || 5);
+      var times = Search.benchKeystrokes(index(svc), msg.phrases, now, msg.reps || 5);
       return { type: "bench", n: times.length, p50: Search.percentile(times, 50), p95: Search.percentile(times, 95), p99: Search.percentile(times, 99) };
     }
     default:

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "omarchy-plugin-check/store-details",
+  "version": 1790966361,
+  "docs": {
+    "akitaonrails.ai-usagebar": "5492db1b5daf1c286967cf866757a5abbffedd404c8b59a5fb66c851dd376e41",
+    "io.github.letsfg.flights": "78aa4f9f33c6610f675b2a2527193d4e38469708aaed14fadadf26d01ed20e7d",
+    "omamail": "433049b09d3650e88d71c29cb49519f25f8a042bc6f8a44df94ac3fd1fed47ec"
+  }
+}

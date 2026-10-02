@@ -19,6 +19,8 @@ Item {
     readonly property string sec: Store.section
     readonly property var crit: r.criteria || (d ? d.criteria || null : null)
     readonly property bool installable: Inst.command(r) !== null
+    // Marketplace preview first, then README images (detail document listing.gallery).
+    readonly property var shots: (r.full ? [r.full] : []).concat((r.gallery || []).filter(u => u !== r.full)).slice(0, 6)
 
     function move(dir) {
         body.contentY = Math.max(0, Math.min(body.contentHeight - body.height, body.contentY + (dir === "down" ? 80 : dir === "up" ? -80 : 0)));
@@ -350,7 +352,7 @@ Item {
                     Thumb {
                         anchors.fill: parent
                         anchors.margins: 1
-                        url: Store.gallery === 0 ? (view.r.full || "") : (view.r.thumb || "")
+                        url: view.shots[Store.gallery] || view.r.full || ""
                         ini: view.r.ini || ""
                         iniSize: 48
                         accent: F.accentFor(view.r.id || "", view.r.accent)
@@ -362,10 +364,11 @@ Item {
                     spacing: 6
 
                     Repeater {
-                        model: view.r.full ? [view.r.full] : []
+                        model: view.shots
 
                         Rectangle {
                             required property int index
+                            required property string modelData
 
                             width: 96
                             height: 54
@@ -377,7 +380,7 @@ Item {
                                 anchors.fill: parent
                                 anchors.margins: 1
                                 small: true
-                                url: view.r.thumb || ""
+                                url: parent.index === 0 && view.r.full ? (view.r.thumb || parent.modelData) : parent.modelData
                                 ini: view.r.ini || ""
                                 accent: F.accentFor(view.r.id || "", view.r.accent)
                             }
@@ -389,29 +392,12 @@ Item {
                         }
                     }
 
-                    Rectangle {
-                        width: 96
-                        height: 54
-                        color: Theme.bgDeep
-                        border.color: Theme.borderSubtle
-                        border.width: 1
-                        opacity: 0.6
-
-                        Txt {
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            text: "readme images\n(v2)"
-                            size: 9
-                            color: Theme.muted
-                        }
-                    }
-
                     Txt {
-                        width: parent.width - 220
+                        width: parent.width - 102 * view.shots.length - 6
                         height: 54
                         horizontalAlignment: Text.AlignRight
                         verticalAlignment: Text.AlignBottom
-                        text: (view.r.full ? "1 preview from marketplace · cached in ~/.cache/omarchy-plugin-check/img" : "no preview → initials tile")
+                        text: view.shots.length === 0 ? "no preview → initials tile" : (view.r.full ? "marketplace preview" : "") + ((view.r.gallery || []).length ? (view.r.full ? " + " : "") + (view.r.gallery || []).length + " readme image(s)" : "") + " · cached in ~/.cache/omarchy-plugin-check/img"
                         size: 10
                         color: Theme.muted
                     }
@@ -819,7 +805,7 @@ Item {
                 width: parent.width
                 title: "commits · 52 weeks"
                 icon: "commit"
-                note: Store.meta.dev ? "sample series (dev snapshot)" : "github graphql · nightly collector"
+                note: view.d && view.d.weeks && view.d.weeks.some(w => w === null) ? "github · last 100 commits (older weeks unknown)" : "github graphql · nightly collector"
                 titleSize: 12
 
                 Sparkline {

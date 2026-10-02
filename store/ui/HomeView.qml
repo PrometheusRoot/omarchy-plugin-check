@@ -250,7 +250,7 @@ Flickable {
     Txt {
         visible: !Store.data
         anchors.centerIn: parent
-        text: Store.snapshotMissing ? "no snapshot found · run omarchy-plugin-check update" : "loading snapshot…"
+        text: Store.verifyError !== "" ? "snapshot refused · " + Store.verifyError : Store.snapshotMissing ? "no snapshot found · run omarchy-plugin-check update" : "loading snapshot…"
         color: Theme.muted
     }
 }

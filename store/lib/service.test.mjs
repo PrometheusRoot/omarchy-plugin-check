@@ -1,26 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { devSnapshotText } from "../tools/devdata.mjs";
+import { devHomeText, devSearchText } from "../tools/devdata.mjs";
 import * as S from "./service.mjs";
 
 // The worker protocol, driven exactly as ui/worker.mjs does (messages in, replies out).
-const text = devSnapshotText();
+const home = JSON.parse(devHomeText());
 const svc = S.createService();
-const loaded = S.handle(svc, { type: "load", text });
+const loaded = S.handle(svc, { type: "load", text: devSearchText(), imageBase: home.imageBase, byCategory: home.shelves.byCategory });
 
-test("load replies with a small home payload (cached on disk by the UI)", () => {
+test("load parses the search columns (the home slice never comes here)", () => {
   assert.equal(loaded.type, "loaded");
-  const h = loaded.home;
-  assert.equal(h.total, 4523);
-  assert.ok(h.heroes.length > 0);
-  assert.ok(h.shelves.top.length <= S.SHELF_SIZE);
-  assert.ok(h.catCounts.Widgets > 1000);
-  assert.ok(JSON.stringify(h).length < 400_000, "home payload stays small");
-  for (const shelf of Object.values(h.shelves)) for (const p of shelf) assert.notEqual(p.verdict, "blocked");
+  assert.equal(loaded.total, home.total);
+  assert.ok(loaded.ms.parse >= 0 && loaded.ms.map >= 0);
 });
 
 test("index then search: rows, count, words; stale seqs are the UI's job", () => {
   assert.equal(S.handle(svc, { type: "index" }).type, "indexed");
+  let w = { next: 0 };
+  let chunks = 0;
+  while (w.next !== -1) {
+    w = S.handle(svc, { type: "warm", from: w.next, count: 8 });
+    chunks++;
+  }
+  assert.equal(chunks, 5);
+  assert.equal(Object.keys(svc.idx.cache).length, 36);
   const r = S.handle(svc, { type: "search", seq: 7, q: "weather", f: {}, sort: "rank", limit: 10 });
   assert.equal(r.type, "results");
   assert.equal(r.seq, 7);
@@ -48,7 +51,8 @@ test("records, browse, similar, bench", () => {
   const k = S.handle(svc, { type: "browse", cat: "Widgets", kind: "Overlay", limit: 30 });
   assert.ok(k.rows.every((x) => x.kind === "Overlay"));
   const sim = S.handle(svc, { type: "similar", id: "omamail" });
-  assert.ok(sim.rows.length <= 4 && sim.rows.every((x) => x.id !== "omamail"));
+  assert.ok(sim.rows.length > 0 && sim.rows.length <= 4 && sim.rows.every((x) => x.id !== "omamail"));
+  assert.deepEqual(S.handle(svc, { type: "similar", id: "nope" }).rows, []);
   const bench = S.handle(svc, { type: "bench", phrases: ["omarchy"], reps: 1 });
   assert.equal(bench.n, 7);
   assert.equal(S.handle(svc, { type: "nope" }).type, "error");

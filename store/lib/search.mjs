@@ -87,43 +87,59 @@ function orderBy(n, keyOf, tiePos) {
 }
 
 var SORT_KEYS = {
-  stars: function (p) { return DESC - (p.stars || 0); },
-  trending: function (p) { return DESC - (p.vel30 || 0); },
-  "new": function (p) { return DESC - dayKey(p.listed); },
-  updated: function (p) { return DESC - dayKey(p.updated); }
+  stars: function (t, i) { return DESC - (t.stars[i] || 0); },
+  trending: function (t, i) { return DESC - (t.vel30[i] || 0); },
+  "new": function (t, i) { return DESC - dayKey(t.listed[i]); },
+  updated: function (t, i) { return DESC - dayKey(t.updated[i]); }
 };
 
+// Columns the index reads, from UI-model objects (tests, small lists). The store's worker
+// gets them straight from store-search.json (lib/data.mjs fromSearch), never via objects.
+export function table(plugins) {
+  var keys = ["id", "name", "author", "tags", "desc", "cat", "kind", "verdict", "rank", "stars", "vel30", "listed", "updated"];
+  var t = { n: plugins.length };
+  for (var k = 0; k < keys.length; k++) t[keys[k]] = new Array(plugins.length);
+  for (var i = 0; i < plugins.length; i++)
+    for (var j = 0; j < keys.length; j++) {
+      var v = plugins[i][keys[j]];
+      t[keys[j]][i] = keys[j] === "tags" ? (v || []).join(" ") : v;
+    }
+  return t;
+}
+
 // The ordering for a sort mode, sorted on first use (ties keep rank order).
-export function ordering(idx, plugins, sort) {
+export function ordering(idx, sort) {
+  var t = idx.t;
   if (!SORT_KEYS[sort] && sort !== "rank") sort = "rank";
   if (idx.order[sort]) return idx.order[sort];
   var n = idx.n;
   if (!idx.order.rank) {
     var ident = new Array(n);
     for (var k = 0; k < n; k++) ident[k] = k;
-    idx.order.rank = orderBy(n, function (x) { return plugins[x].rank || 1e6; }, ident);
+    idx.order.rank = orderBy(n, function (x) { return t.rank[x] || 1e6; }, ident);
     var pos = new Array(n);
     for (var r = 0; r < n; r++) pos[idx.order.rank[r]] = r;
     idx.rankPos = pos;
   }
   if (sort !== "rank") {
     var key = SORT_KEYS[sort];
-    idx.order[sort] = orderBy(n, function (x) { return key(plugins[x]); }, idx.rankPos);
+    idx.order[sort] = orderBy(n, function (x) { return key(t, x); }, idx.rankPos);
   }
   return idx.order[sort];
 }
 
-// plugins: model objects from data.mjs (fields: id name author tags desc rank stars vel30
-// listed updated). Returns the index; plugins are not mutated.
-export function buildIndex(plugins) {
-  var n = plugins.length;
+// src: a column table (fromSearch / table(): id name author tags(string) desc cat kind
+// verdict rank stars vel30 listed updated, one array each) or an array of UI-model objects.
+// Returns the index; the columns are not mutated.
+export function buildIndex(src) {
+  var t = Array.isArray(src) ? table(src) : src;
+  var n = t.n;
   if (n >= MAX_N) throw new Error("search index supports < " + MAX_N + " plugins");
   var raw = new Array(n);
   var text = new Array(n);
   for (var i = 0; i < n; i++) {
-    var p = plugins[i];
-    raw[i] = oneLine(p.name) + "\n" + oneLine(p.author) + "\n" + oneLine((p.tags || []).join(" "));
-    text[i] = oneLine(p.id) + " " + oneLine(p.desc);
+    raw[i] = oneLine(t.name[i]) + "\n" + oneLine(t.author[i]) + "\n" + oneLine(t.tags[i]);
+    text[i] = oneLine(t.id[i]) + " " + oneLine(t.desc[i]);
   }
   // One normalize over all short fields instead of three per plugin. id + description are
   // only lowercased and accent-folded: query words never contain punctuation, so a word
@@ -131,7 +147,7 @@ export function buildIndex(plugins) {
   var short = normalizeBlock(raw.join("\n")).split("\n");
   var long = text.join("\n").replace(ACCENTED, fold).toLowerCase().split("\n");
   var idx = {
-    n: n, nl: new Array(n), hay: new Array(n), nEnd: new Int32Array(n), aEnd: new Int32Array(n), tEnd: new Int32Array(n),
+    t: t, n: n, nl: new Array(n), hay: new Array(n), nEnd: new Int32Array(n), aEnd: new Int32Array(n), tEnd: new Int32Array(n),
     nameChars: new Int32Array(n), order: {}, rankPos: null, cache: {}, cacheSize: 0
   };
   for (var j = 0; j < n; j++) {
@@ -145,7 +161,7 @@ export function buildIndex(plugins) {
     idx.tEnd[j] = idx.aEnd[j] + 1 + tg.length;
     idx.nameChars[j] = charMask(nm);
   }
-  ordering(idx, plugins, "rank");
+  ordering(idx, "rank");
   return idx;
 }
 
@@ -176,11 +192,11 @@ export function filterKey(f, sort) {
   return [sort, f.cat || "all", f.kind || "all", f.verdict || "all", f.inst ? "1" : "0", f.instVersion || 0].join("|");
 }
 
-export function passes(p, f, installed) {
-  if (f.cat && f.cat !== "all" && p.cat !== f.cat) return false;
-  if (f.kind && f.kind !== "all" && p.kind !== f.kind) return false;
-  if (f.verdict && f.verdict !== "all" && p.verdict !== f.verdict) return false;
-  if (f.inst && !(installed && installed[p.id])) return false;
+export function passes(t, i, f, installed) {
+  if (f.cat && f.cat !== "all" && t.cat[i] !== f.cat) return false;
+  if (f.kind && f.kind !== "all" && t.kind[i] !== f.kind) return false;
+  if (f.verdict && f.verdict !== "all" && t.verdict[i] !== f.verdict) return false;
+  if (f.inst && !(installed && installed[t.id[i]])) return false;
   return true;
 }
 
@@ -196,9 +212,10 @@ export function narrows(prevWords, ws) {
 // query: raw text; f: {cat, kind, verdict, inst, instVersion}; installed: {id: true};
 // prev: the previous return value (optional). Returns {res: Int32Array of plugin indices
 // best-first, count, matched: Int32Array of positions in the ordering, words, key, scores}.
-export function search(idx, plugins, query, f, sort, installed, prev) {
+export function search(idx, query, f, sort, installed, prev) {
   f = f || {};
-  var order = ordering(idx, plugins, sort);
+  var t = idx.t;
+  var order = ordering(idx, sort);
   sort = idx.order[sort] ? sort : "rank";
   var ws = words(query);
   var nw = ws.length;
@@ -226,7 +243,7 @@ export function search(idx, plugins, query, f, sort, installed, prev) {
   for (var c = 0; c < count; c++) {
     var pos = seeded ? seed[c] : c;
     var i = order[pos];
-    if (anyF && !passes(plugins[i], f, installed)) continue;
+    if (anyF && !passes(t, i, f, installed)) continue;
     var sc = 0;
     for (var k = 0; k < nw; k++) {
       var v = S[k][i];
@@ -281,16 +298,19 @@ function remember(idx, w, scores) {
 
 // Scores every single-character word once (the first keystroke is the most expensive
 // one). The store's worker runs this right after the index; the benchmark does the same.
-export function warm(idx, plugins) {
-  var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+// chars: which ones (default all of WARM_CHARS); the store warms a few per worker message
+// so a keystroke typed meanwhile waits for one chunk, not for all 36.
+export var WARM_CHARS = "eaoirtnslcmdupghbyfwkvxzjq0123456789";
+export function warm(idx, chars) {
+  chars = chars || WARM_CHARS;
   for (var i = 0; i < chars.length; i++)
-    if (!idx.cache[chars.charAt(i)]) search(idx, plugins, chars.charAt(i), {}, "rank", {}, null);
+    if (!idx.cache[chars.charAt(i)]) search(idx, chars.charAt(i), {}, "rank", {}, null);
 }
 
 // Replays typing `phrases` letter by letter (each keystroke narrows from the previous one,
 // as the store does); returns per-keystroke milliseconds measured with `now`
 // (performance.now in Node, Date.now in QML, where `reps` > 1 averages out the 1 ms clock).
-export function benchKeystrokes(idx, plugins, phrases, now, reps) {
+export function benchKeystrokes(idx, phrases, now, reps) {
   reps = reps || 1;
   var times = [];
   for (var p = 0; p < phrases.length; p++) {
@@ -299,7 +319,7 @@ export function benchKeystrokes(idx, plugins, phrases, now, reps) {
       var q = phrases[p].slice(0, k);
       var t0 = now();
       var out = null;
-      for (var r = 0; r < reps; r++) out = search(idx, plugins, q, {}, "rank", {}, prev);
+      for (var r = 0; r < reps; r++) out = search(idx, q, {}, "rank", {}, prev);
       times.push((now() - t0) / reps);
       prev = out;
     }

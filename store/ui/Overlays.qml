@@ -339,7 +339,7 @@ Item {
 
             Txt {
                 width: parent.width
-                text: "shelves: top = rank · trending = ★ velocity · new = listedAt · updated = repository push · safe picks = safe + rank. weights shown are placeholder values" + (Store.meta.dev ? "; activity and engagement in this dev snapshot are sample values." : ".")
+                text: "shelves: top = rank · trending = ★ velocity · new = listedAt · updated = repository push · safe picks = safe + rank. weights shown are placeholder values" + "."
                 size: 11
                 color: Theme.muted
                 wrapMode: Text.Wrap

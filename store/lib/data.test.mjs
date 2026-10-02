@@ -1,73 +1,108 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { devDetail, devSnapshotText } from "../tools/devdata.mjs";
+import { devDetail, devHomeText, devSearchText } from "../tools/devdata.mjs";
 import * as D from "./data.mjs";
 
-const snap = JSON.parse(devSnapshotText());
+const homeDoc = JSON.parse(devHomeText());
+const searchDoc = JSON.parse(devSearchText());
 
+const row = (id, extra = {}) => ({ id, name: id, cat: "Widgets", verdict: { combined: "unknown", basis: "none", providers: {} }, ...extra });
 const tiny = {
+  version: 9,
   imageBase: "https://plugins.omarchy.org/",
   apiBase: "api",
   catalog: { generatedAt: "2026-09-30T00:00:00Z", plugins: 3 },
   providers: [{ id: "opc", name: "omarchy-plugin-check", tier: "core", verification: "sigstore", rows: 2 }],
   ranking: { version: "v", factors: [{ id: "stars", label: "log(stars)", weight: 20 }], gates: { safe: 1 } },
-  shelves: { top: ["a", "blk", "b", "ghost"], trending: ["blk"], new: [], updated: [], safePicks: ["a"], byCategory: { Widgets: ["blk", "a"] } },
   categories: [{ name: "Widgets", count: 2 }],
+  counts: { safe: 1, caution: 0, risky: 0, blocked: 1, unknown: 1, images: 2 },
+  total: 3,
+  shelves: { top: ["a", "blk", "b", "ghost"], trending: ["blk"], new: [], updated: [], safePicks: ["a"], byCategory: { Widgets: ["blk", "a"] } },
   plugins: [
-    { id: "a", name: "Alpha Widget", author: "x", desc: "d", cat: "Widgets", kind: "Bar widget", tags: ["t"], repo: "https://github.com/x/a", state: "listed", verif: "verified", listed: "2026-01-02T00:00:00Z", updated: null, img: { thumb: "assets/a.webp", full: "assets/a-big.webp" }, gallery: [], gh: { stars: 5, vel30: 1, lastCommit: "2026-09-01T00:00:00Z" }, mkt: null, rank: 1, score: 50, fac: [10], verdict: { combined: "safe", basis: "trusted", contested: false, commit: "c".repeat(40), providers: { opc: "safe" } }, report: "plugins/a.json" },
-    { id: "blk", name: "Blocked", cat: "Widgets", tags: [], state: "listed", img: null, gh: null, mkt: null, rank: null, score: null, fac: [], verdict: { combined: "blocked", basis: "trusted", contested: false, providers: {} }, report: null },
-    { id: "b", name: "b", cat: null, tags: [], state: "listed", img: { thumb: "https://cdn.example/b.png" }, gh: null, mkt: null, rank: 2, score: 1, fac: [], verdict: { combined: "unknown", basis: "none", contested: false, providers: {} }, report: null },
+    row("a", { name: "Alpha Widget", author: "x", listed: "2026-01-02T00:00:00Z", img: { thumb: "assets/a.webp", full: "assets/a-big.webp" }, gh: { stars: 5, vel30: 1, lastCommit: "2026-09-01T00:00:00Z" }, rank: 1, verdict: { combined: "safe", basis: "trusted", commit: "c".repeat(40), providers: { opc: "safe" }, criteria: { checked: ["no-exec"], failed: [] }, risk: 4 }, report: true }),
+    row("blk", { verdict: { combined: "blocked", basis: "trusted", providers: {} } }),
+    row("b", { cat: undefined, img: { thumb: "https://cdn.example/b.png" }, rank: 2 }),
   ],
 };
 
-test("fromSnapshot maps the store.json draft onto the UI model", () => {
-  const m = D.fromSnapshot(tiny);
-  const a = m.plugins[m.byId.a];
+test("fromHome maps the home slice onto the UI payload", () => {
+  const h = D.fromHome(tiny);
+  const a = h.byId.a;
   assert.equal(a.thumb, "https://plugins.omarchy.org/assets/a.webp");
   assert.equal(a.full, "https://plugins.omarchy.org/assets/a-big.webp");
   assert.equal(a.updated, "2026-09-01", "falls back to gh.lastCommit");
   assert.equal(a.listed, "2026-01-02");
   assert.equal(a.ini, "AW");
-  assert.equal(a.views, null, "mkt null -> no engagement data");
-  assert.equal(m.plugins[m.byId.b].verdict, "unreviewed", "unknown -> unreviewed");
-  assert.equal(m.plugins[m.byId.b].cat, "Other");
-  assert.equal(m.plugins[m.byId.b].thumb, "https://cdn.example/b.png", "absolute URLs kept");
-  assert.equal(m.counts.safe, 1);
-  assert.equal(m.counts.blocked, 1);
-  assert.equal(m.counts.images, 2);
-  assert.equal(m.meta.apiBase, "api");
-  assert.equal(D.catCount(m, "Widgets"), 2);
-  assert.equal(D.catCount(m, "Nope"), 0);
+  assert.equal(a.risk, 4);
+  assert.deepEqual(a.criteria.checked, ["no-exec"]);
+  assert.ok(a.complete);
+  assert.equal(h.byId.b.verdict, "unreviewed", "unknown -> unreviewed");
+  assert.equal(h.byId.b.cat, "Other");
+  assert.equal(h.byId.b.thumb, "https://cdn.example/b.png", "absolute URLs kept");
+  assert.deepEqual(h.counts, { safe: 1, caution: 0, risky: 0, blocked: 1, unreviewed: 1, images: 2 });
+  assert.equal(h.catCounts.Widgets, 2);
+  assert.equal(h.meta.apiBase, "api");
+  assert.equal(h.meta.version, 9);
 });
 
 test("blocked never reaches shelves or the hero; unknown ids are dropped", () => {
-  const m = D.fromSnapshot(tiny);
-  const names = (ixs) => ixs.map((i) => m.plugins[i].id);
-  assert.deepEqual(names(m.shelves.top), ["a", "b"]);
-  assert.deepEqual(names(m.shelves.trending), []);
-  assert.deepEqual(names(m.shelves.byCategory.Widgets), ["a"]);
-  assert.deepEqual(names(m.heroes), ["a", "b"], "heroes need an image (full, else thumb)");
+  const h = D.fromHome(tiny);
+  const ids = (rs) => rs.map((p) => p.id);
+  assert.deepEqual(ids(h.shelves.top), ["a", "b"]);
+  assert.deepEqual(ids(h.shelves.trending), []);
+  assert.deepEqual(ids(h.byCategory.Widgets), ["a"]);
+  assert.deepEqual(ids(h.heroes), ["a", "b"], "heroes need an image (full, else thumb)");
+  assert.equal(D.fromHome(null).total, 0);
 });
 
-test("the full dev snapshot maps 4,523 plugins with 3 reviewed", () => {
-  const m = D.fromSnapshot(snap);
-  assert.equal(m.plugins.length, 4523);
-  assert.equal(m.counts.unreviewed, 4520);
-  assert.equal(m.counts.caution, 3);
-  assert.ok(m.heroes.length > 0 && m.heroes.length <= D.HERO_COUNT);
-  assert.ok(m.meta.dev);
-  for (const p of m.plugins) {
-    assert.ok(p.id && p.name !== undefined);
-    assert.ok(["safe", "caution", "risky", "blocked", "unreviewed"].includes(p.verdict));
+test("the real home slice: small, shelves full, heroes with images", () => {
+  const h = D.fromHome(homeDoc);
+  assert.ok(devHomeText().length < 200_000, "home stays small");
+  assert.ok(h.total > 4500);
+  assert.ok(h.heroes.length > 0 && h.heroes.length <= D.HERO_COUNT);
+  assert.equal(h.shelves.top.length, D.SHELF_SIZE);
+  assert.ok(h.catCounts.Widgets > 1000);
+  assert.ok(h.meta.dev);
+  for (const shelf of Object.values(h.shelves)) for (const p of shelf) assert.notEqual(p.verdict, "blocked");
+});
+
+test("search columns -> table and records agree with the home rows", () => {
+  const t = D.fromSearch(searchDoc, homeDoc.imageBase);
+  assert.equal(t.n, homeDoc.total);
+  const h = D.fromHome(homeDoc);
+  for (const full of h.shelves.top.slice(0, 6)) {
+    const r = D.record(t, t.byId[full.id]);
+    assert.equal(r.complete, false);
+    for (const k of ["id", "name", "author", "cat", "kind", "verdict", "basis", "rank", "stars", "vel30", "thumb", "repo", "commit", "risk", "verif", "listed", "updated", "accent", "ini"])
+      assert.deepEqual(r[k], full[k], `${full.id}.${k}`);
+    assert.deepEqual(r.providers, full.providers);
+    assert.deepEqual(r.criteria, full.criteria);
+  }
+  const om = D.record(t, t.byId.omamail);
+  assert.equal(om.verdict, "caution");
+  assert.equal(om.risk, 13);
+  assert.deepEqual(om.criteria.failed.sort(), ["no-exec", "no-network"]);
+  assert.equal(om.providers.opc, "caution");
+  assert.equal(om.report, "plugins/omamail.json");
+  assert.match(om.repo, /^https:\/\/github\.com\//);
+  for (let i = 0; i < t.n; i += 97) {
+    const r = D.record(t, i);
+    assert.ok(["safe", "caution", "risky", "blocked", "unreviewed"].includes(r.verdict));
+    assert.ok(r.desc.length <= 200);
   }
 });
 
 test("fromDetail maps the aggregated view and our report", () => {
-  const d = D.fromDetail(devDetail("omamail"), snap.providers);
+  const d = D.fromDetail(devDetail("omamail"), homeDoc.providers, homeDoc.imageBase);
   assert.equal(d.combined.verdict, "caution");
   assert.equal(d.providers.length, 2);
-  assert.equal(d.providers[0].name, "omarchy-plugin-check");
-  assert.equal(d.providers[0].signed, false, "unsigned-dev is not a signature");
+  const opc = d.providers.find((p) => p.id === "opc");
+  assert.match(opc.name, /omarchy-plugin-check/);
+  assert.equal(opc.signed, false, "unsigned-dev is not a signature");
+  assert.deepEqual(d.criteria.notChecked, ["reviewed-by-human"]);
+  assert.ok(d.listing.complete && d.listing.id === "omamail");
+  assert.ok(d.listing.license !== undefined && d.listing.c90 !== undefined);
+  assert.ok(d.weeks.some((w) => w > 0), "weekly commits from the collector");
   assert.ok(d.hasReport);
   assert.equal(d.risk, 13);
   assert.ok(d.findings.length > 0 && d.findings.length <= 12);
@@ -75,6 +110,7 @@ test("fromDetail maps the aggregated view and our report", () => {
   assert.equal(d.caps.processExec, "med");
   assert.ok(d.hosts.some((h) => h.host === "accounts.google.com"));
   assert.equal(d.weeks.length, 52);
+  assert.ok(d.deps !== undefined && d.quality.loc > 0);
   assert.ok(d.reviewedCommit.startsWith("3d0d673"));
   // findings come most severe first
   const order = ["critical", "high", "medium", "low", "info"];

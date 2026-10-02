@@ -54,7 +54,7 @@ Flickable {
             icon: "snap"
 
             KV {
-                pairs: [["store.json", Store.usingDev ? "dev snapshot · unsigned (dev: true)" : "signed · ed25519", Store.usingDev ? "yellow" : "green"], ["path", Store.snapshotPath.replace(Store.home, "~")], ["catalog", F.dateOnly(view.m.catalogAt) + " · " + F.int(Store.total) + " plugins · " + F.int(view.c.images) + " with preview"], ["reports", (Store.total - (view.c.unreviewed || 0)) + " reviewed · " + (view.c.safe || 0) + " safe · " + (view.c.caution || 0) + " caution · " + (view.c.risky || 0) + " risky · " + (view.c.blocked || 0) + " blocked"], ["ranking", (view.m.rankingVersion || "—") + (view.m.dev ? " · activity + engagement are sample values" : "")], ["index", Store.indexed ? "built in " + view.t.index + " ms · prefix + substring + fuzzy" : "building…"]]
+                pairs: [["bundle", Store.usingDev ? "bundled dev data · not verified" : "manifest verified · ed25519 + sha256" + (view.m.dev ? " (DEV key)" : ""), Store.usingDev || view.m.dev ? "yellow" : "green"], ["path", Store.snapshotPath.replace(Store.home, "~")], ["catalog", F.dateOnly(view.m.catalogAt) + " · " + F.int(Store.total) + " plugins · " + F.int(view.c.images) + " with preview"], ["reports", (Store.total - (view.c.unreviewed || 0)) + " reviewed · " + (view.c.safe || 0) + " safe · " + (view.c.caution || 0) + " caution · " + (view.c.risky || 0) + " risky · " + (view.c.blocked || 0) + " blocked"], ["ranking", (view.m.rankingVersion || "—") + (view.m.dev ? " · DEV snapshot" : "")], ["index", Store.indexed ? "built in " + view.t.index + " ms · prefix + substring + fuzzy" : "building…"]]
             }
         }
 
@@ -139,7 +139,7 @@ Flickable {
             note: "this session"
 
             KV {
-                pairs: [["first frame", (view.t.firstFrame || "—") + " ms after " + (Store.launched ? "launch" : "qml load")], ["home", view.t.homeCacheAt !== undefined ? view.t.homeCacheAt + " ms (disk cache)" : view.t.loadedAt !== undefined ? view.t.loadedAt + " ms (worker)" : "—"], ["snapshot", view.t.parse !== undefined ? "parse " + view.t.parse + " · map " + view.t.map + " ms (worker, after first frame)" : "—"], ["search", Store.bench ? "p50 " + F.ms(Store.bench.p50) + " · p95 " + F.ms(Store.bench.p95) + " ms per keystroke (" + Store.bench.n + " keystrokes, worker)" : Store.indexed ? "measuring…" : "index pending"], ["scroll", "ListView / GridView recycle · async Image"]]
+                pairs: [["first frame", (view.t.firstFrame || "—") + " ms after " + (Store.launched ? "launch" : "qml load")], ["home", view.t.homeAt !== undefined ? view.t.homeAt + " ms (verified " + (view.t.verify !== undefined ? view.t.verify + " ms" : "— dev data") + " · home map " + view.t.homeMap + " ms)" : "—"], ["search file", view.t.parse !== undefined ? "parse " + view.t.parse + " · map " + view.t.map + " ms (worker, after first frame) · searchable " + (view.t.indexedAt || "…") + " ms" : "—"], ["search", Store.bench ? "p50 " + F.ms(Store.bench.p50) + " · p95 " + F.ms(Store.bench.p95) + " ms per keystroke (" + Store.bench.n + " keystrokes, worker)" : Store.indexed ? "measuring…" : "index pending"], ["scroll", "ListView / GridView recycle · async Image"]]
             }
 
             Btn {

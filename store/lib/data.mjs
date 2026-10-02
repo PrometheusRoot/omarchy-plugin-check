@@ -1,10 +1,12 @@
 // The ONE adapter between snapshot files and the UI model (store/SNAPSHOT-FIELDS.md).
-// Switching the store to the published store.json, or following a schema change, touches
-// this file only: QML and the other libs read the model below, never snapshot fields.
+// Following a schema change touches this file only: QML and the other libs read the model
+// below, never snapshot fields.
 //
-// Input: store.json (spec/schemas/store.schema.json, draft v1) and the per-plugin
-// aggregated view at apiBase + plugin.report (api-plugin.schema.json; our own provider
-// row carries the rich opsec report in row.detail.report).
+// Input: the client bundle (ADR-0032), verified by bin/omarchy-plugin-store-verify before any
+// of it is parsed: store-home.json (shelves + the rows they show, store.json row format) on
+// the GUI thread for the first frame; store-search.json (parallel columns) in the worker;
+// per-plugin detail documents (api-plugin.schema.json: listing, activity, provider rows, our
+// row's detail.report) lazily.
 
 export var HERO_COUNT = 6;
 
@@ -91,83 +93,160 @@ export function mapPlugin(s, imageBase) {
   };
 }
 
-export function ids(list, byId, plugins, dropBlocked) {
+var VERDICTS = ["safe", "caution", "risky", "blocked", "unreviewed"];
+var FLAG = { contested: 1, archived: 2, noInstall: 4, customInstall: 8, retired: 16, builtin: 32, detail: 64 };
+
+function meta(doc) {
+  var cat = doc.catalog || {};
+  var rk = doc.ranking || {};
+  return {
+    version: doc.version || 0,
+    generatedAt: str(doc.generatedAt),
+    expires: str(doc.expires),
+    dev: !!doc.dev,
+    catalogAt: str(cat.generatedAt),
+    catalogPlugins: cat.plugins || doc.total || 0,
+    imageBase: str(doc.imageBase),
+    apiBase: str(doc.apiBase),
+    providers: doc.providers || [],
+    factors: rk.factors || [],
+    gates: rk.gates || {},
+    rankingVersion: str(rk.version),
+    statsAt: str(rk.statsGeneratedAt)
+  };
+}
+
+function shelf(list, byId, limit) {
   var out = [];
-  for (var i = 0; list && i < list.length; i++) {
-    var ix = byId[list[i]];
-    if (ix === undefined) continue;
-    if (dropBlocked && plugins[ix].verdict === "blocked") continue;
-    out.push(ix);
+  for (var i = 0; list && i < list.length && out.length < limit; i++) {
+    var p = byId[list[i]];
+    if (p && p.verdict !== "blocked") out.push(p);
   }
   return out;
 }
 
-// Returns the UI model. Blocked plugins never appear on shelves or the hero (store
-// approval note), whatever the snapshot says; they stay searchable.
-export function fromSnapshot(snap) {
-  snap = snap || {};
-  var imageBase = str(snap.imageBase);
-  var raw = snap.plugins || [];
-  var plugins = new Array(raw.length);
+export var SHELF_SIZE = 12;
+
+// store-home.json -> the home payload the UI binds to (runs on the GUI thread: ~130 rows).
+// Blocked plugins never appear on shelves or the hero (store approval note), whatever the
+// snapshot says; they stay searchable.
+export function fromHome(home) {
+  home = home || {};
+  var m = meta(home);
   var byId = {};
-  for (var i = 0; i < raw.length; i++) {
-    plugins[i] = mapPlugin(raw[i], imageBase);
-    byId[plugins[i].id] = i;
+  var rows = home.plugins || [];
+  for (var i = 0; i < rows.length; i++) {
+    var p = mapPlugin(rows[i], m.imageBase);
+    p.complete = true;
+    byId[p.id] = p;
   }
-  var sh = snap.shelves || {};
-  var byCat = {};
-  for (var c in sh.byCategory || {}) byCat[c] = ids(sh.byCategory[c], byId, plugins, true);
-  var top = ids(sh.top, byId, plugins, true);
+  var sh = home.shelves || {};
+  var top = shelf(sh.top, byId, 1e9);
   var heroes = [];
-  for (var h = 0; h < top.length && heroes.length < HERO_COUNT; h++)
-    if (plugins[top[h]].full) heroes.push(top[h]);
-  var counts = { safe: 0, caution: 0, risky: 0, blocked: 0, unreviewed: 0, images: 0 };
-  for (var k = 0; k < plugins.length; k++) {
-    counts[plugins[k].verdict]++;
-    if (plugins[k].thumb) counts.images++;
-  }
-  var cat = snap.catalog || {};
-  var rk = snap.ranking || {};
+  for (var h = 0; h < top.length && heroes.length < HERO_COUNT; h++) if (top[h].full) heroes.push(top[h]);
+  var byCat = {};
+  for (var c in sh.byCategory || {}) byCat[c] = shelf(sh.byCategory[c], byId, SHELF_SIZE);
+  var catCounts = {};
+  var cats = home.categories || [];
+  for (var k = 0; k < cats.length; k++) catCounts[cats[k].name] = cats[k].count;
+  var n = home.counts || {};
   return {
-    meta: {
-      version: snap.version || 0,
-      generatedAt: str(snap.generatedAt),
-      expires: str(snap.expires),
-      dev: !!snap.dev,
-      catalogAt: str(cat.generatedAt),
-      catalogPlugins: cat.plugins || plugins.length,
-      imageBase: imageBase,
-      apiBase: str(snap.apiBase),
-      providers: snap.providers || [],
-      factors: rk.factors || [],
-      gates: rk.gates || {},
-      rankingVersion: str(rk.version),
-      statsAt: str(rk.statsGeneratedAt)
-    },
-    plugins: plugins,
-    byId: byId,
+    meta: m,
+    counts: { safe: n.safe || 0, caution: n.caution || 0, risky: n.risky || 0, blocked: n.blocked || 0, unreviewed: n.unknown || 0, images: n.images || 0 },
+    total: home.total || 0,
+    catCounts: catCounts,
     heroes: heroes,
     shelves: {
-      top: top,
-      trending: ids(sh.trending, byId, plugins, true),
-      "new": ids(sh["new"], byId, plugins, true),
-      updated: ids(sh.updated, byId, plugins, true),
-      safePicks: ids(sh.safePicks, byId, plugins, true),
-      byCategory: byCat
+      top: top.slice(0, SHELF_SIZE),
+      trending: shelf(sh.trending, byId, SHELF_SIZE),
+      "new": shelf(sh["new"], byId, SHELF_SIZE),
+      updated: shelf(sh.updated, byId, SHELF_SIZE),
+      safePicks: shelf(sh.safePicks, byId, SHELF_SIZE)
     },
-    categories: snap.categories || [],
-    counts: counts
+    byCategory: byCat,
+    byId: byId
   };
 }
 
-export function catCount(model, name) {
-  for (var i = 0; i < model.categories.length; i++)
-    if (model.categories[i].name === name) return model.categories[i].count;
-  return 0;
+function pick(dict, ix) {
+  return ix >= 0 && ix < dict.length ? dict[ix] : "";
 }
 
-// Per-plugin detail (lazy). view = api/v1/plugins/<id>.json.
-export function fromDetail(view, providersMeta) {
+// store-search.json -> the worker's table: the document's own arrays plus a few resolved
+// string columns (references into the interned dictionaries, no new strings). Records are
+// built per displayed row by record(); nothing here allocates per plugin except byId.
+export function fromSearch(doc, imageBase) {
+  var c = doc.cols;
+  var d = doc.dict;
+  var n = doc.n;
+  var author = new Array(n);
+  var cat = new Array(n);
+  var kind = new Array(n);
+  var verdict = new Array(n);
+  var byId = {};
+  for (var i = 0; i < n; i++) {
+    author[i] = pick(d.author, c.author[i]);
+    cat[i] = pick(d.cat, c.cat[i]) || "Other";
+    kind[i] = pick(d.kind, c.kind[i]);
+    verdict[i] = VERDICTS[c.verdict[i]] || "unreviewed";
+    byId[c.id[i]] = i;
+  }
+  return {
+    n: n, id: c.id, name: c.name, author: author, tags: c.tags, desc: c.desc, cat: cat, kind: kind,
+    verdict: verdict, rank: c.rank, stars: c.stars, vel30: c.vel30, listed: c.listed, updated: c.updated,
+    cols: c, dict: d, byId: byId, imageBase: str(imageBase)
+  };
+}
+
+function providersOf(t, i) {
+  var out = {};
+  var pv = t.cols.prov;
+  for (var k = 0; k < pv.length; k++) if (pv[k][i] >= 0) out[t.dict.providers[k]] = t.dict.verdict[pv[k][i]];
+  return out;
+}
+
+function critOf(t, i) {
+  var c = t.cols.critC[i];
+  var f = t.cols.critF[i];
+  if (!c && !f) return null;
+  var out = { checked: [], failed: [] };
+  for (var k = 0; k < t.dict.criteria.length; k++) {
+    if (c & (1 << k)) out.checked.push(t.dict.criteria[k]);
+    if (f & (1 << k)) out.failed.push(t.dict.criteria[k]);
+  }
+  return out;
+}
+
+// One UI record from the table (same fields as mapPlugin; `complete: false` = the detail
+// document's listing fills in the rest: license, gallery, activity, marketplace stats...).
+export function record(t, i) {
+  var c = t.cols;
+  var flags = c.flags[i];
+  var repo = c.repo[i];
+  var thumb = abs(t.imageBase, c.thumb[i]);
+  return {
+    id: c.id[i], name: c.name[i] || c.id[i], author: t.author[i], desc: c.desc[i], cat: t.cat[i], kind: t.kind[i],
+    tags: c.tags[i] ? c.tags[i].split(" ") : [],
+    repo: repo && !/^https:\/\//.test(repo) ? "https://github.com/" + repo : repo,
+    path: "", install: "",
+    license: "", version: "",
+    listingState: flags & FLAG.retired ? "retired" : flags & FLAG.builtin ? "builtin" : "listed",
+    verif: pick(t.dict.verif, c.verif[i]) || "unverified",
+    listed: c.listed[i], updated: c.updated[i], thumb: thumb, full: thumb, gallery: [],
+    ini: c.ini[i] || initials(c.name[i] || c.id[i]), accent: pick(t.dict.accent, c.accent[i]),
+    stars: c.stars[i] || 0, vel30: nul(c.vel30[i]), c90: null, contrib: null, bus: null, rel180: null, lastRelease: null, respH: null,
+    archived: !!(flags & FLAG.archived), views: null, copies: null, hearts: null, quality: null,
+    rank: nul(c.rank[i]), rankScore: nul(c.score[i]), fac: [],
+    verdict: t.verdict[i], basis: t.dict.basis[c.basis[i]] || "none", contested: !!(flags & FLAG.contested),
+    commit: c.commit[i] || null, providers: providersOf(t, i), risk: nul(c.risk[i]), criteria: critOf(t, i),
+    report: flags & FLAG.detail ? "plugins/" + c.id[i] + ".json" : null,
+    complete: false
+  };
+}
+
+// Per-plugin detail (lazy). view = api/v1/plugins/<id>.json. `listing` (the full store row)
+// completes a record that came from the search columns.
+export function fromDetail(view, providersMeta, imageBase) {
   view = view || {};
   var tiers = {};
   for (var t = 0; t < (providersMeta || []).length; t++) tiers[providersMeta[t].id] = providersMeta[t];
@@ -192,7 +271,8 @@ export function fromDetail(view, providersMeta) {
       commit: nul(r.commit),
       summary: str(r.summary),
       checked: crit.checked || [],
-      failed: crit.failed || []
+      failed: crit.failed || [],
+      notChecked: crit.notChecked || []
     });
     if (!report && r.detail && r.detail.report) report = r.detail.report;
   }
@@ -202,8 +282,13 @@ export function fromDetail(view, providersMeta) {
     providers: providers,
     hasReport: !!report,
     weeks: view.activity && view.activity.weeks ? view.activity.weeks : [],
-    gallery: view.gallery || []
+    gallery: view.listing && view.listing.gallery ? view.listing.gallery.slice(0, 8) : [],
+    listing: null
   };
+  if (view.listing) {
+    d.listing = mapPlugin(view.listing, str(imageBase));
+    d.listing.complete = true;
+  }
   if (report) mapReport(d, report);
   else rowFindings(d, rows);
   return d;
@@ -229,7 +314,7 @@ function rowFindings(d, rows) {
   var trusted = null;
   for (var j = 0; j < d.providers.length; j++) if (d.providers[j].tier === "core" || d.providers[j].tier === "verified") { trusted = d.providers[j]; break; }
   if (trusted) {
-    d.criteria = { checked: trusted.checked, failed: trusted.failed };
+    d.criteria = { checked: trusted.checked, failed: trusted.failed, notChecked: trusted.notChecked };
     d.reviewedCommit = str(trusted.commit);
     d.reviewedAt = trusted.when;
   }
@@ -242,7 +327,7 @@ export function mapReport(d, r) {
   d.reasons = v.reasons || [];
   d.hardFails = (v.hardFails || []).map(function (h) { return typeof h === "string" ? h : str(h.message || h.id); });
   var crit = v.criteria || {};
-  d.criteria = { checked: crit.checked || [], failed: crit.failed || [] };
+  d.criteria = { checked: crit.checked || [], failed: crit.failed || [], notChecked: crit.notChecked || [] };
   d.reviewedCommit = r.review ? str(r.review.commit) : "";
   d.reviewedAt = r.review ? str(r.review.reviewedAt).slice(0, 10) : "";
   d.aiModel = r.review ? str(r.review.aiModel) : "";

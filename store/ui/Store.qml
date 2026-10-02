@@ -7,24 +7,28 @@ import Quickshell
 import Quickshell.Io
 import "../lib/data.mjs" as Data
 
-// App state + the data worker. The snapshot is read here (FileView) and handed to
-// ui/worker.mjs, which parses, maps (lib/data.mjs), indexes and searches (ADR-0026).
-// The UI only holds the records it displays. The home payload is cached on disk so the
-// next cold start paints the home tab before the worker has parsed anything.
+// App state + the data worker over the client bundle (ADR-0032). Start: verify the bundle
+// (bin/omarchy-plugin-store-verify: manifest signature, expiry, rollback, sha256 of every
+// file) -> map the small home slice here for the first frame (lib/data.mjs fromHome) ->
+// after the first frame hand the search columns to ui/worker.mjs, which maps, indexes and
+// searches (ADR-0031). Detail documents are verified and loaded lazily per plugin.
 Singleton {
     id: store
 
     readonly property bool dev: Quickshell.env("OPC_STORE_DEV") === "1"
     readonly property string home: Quickshell.env("HOME")
     readonly property string cacheDir: home + "/.cache/omarchy-plugin-check"
-    readonly property string devSnapshot: Quickshell.shellDir + "/dev/store.json"
-    readonly property string realSnapshot: Quickshell.env("OPC_STORE_SNAPSHOT") || cacheDir + "/store.json"
-    property string snapshotPath: dev ? devSnapshot : realSnapshot
-    // The 5 MB snapshot goes to the worker right away on a cold cache, but only after the
-    // first frame when the home tab came from the disk cache (2 cores: don't compete).
+    readonly property string devBundle: Quickshell.shellDir + "/dev"
+    readonly property string realBundle: Quickshell.env("OPC_STORE_BUNDLE") || cacheDir
+    readonly property string verifier: Quickshell.shellDir + "/bin/omarchy-plugin-store-verify"
+    // Bundle directory in use (store-manifest.json, store-home.json, store-search.json, ...).
+    property string snapshotPath: dev ? devBundle : realBundle
+    // The search columns go to the worker after the first frame (2 cores: don't compete).
     property bool wantSnapshot: false
     property bool usingDev: dev
     property bool snapshotMissing: false
+    property string verifyError: "" // non-empty: the bundle failed verification and is not used
+    property var homeShelves: ({}) // raw shelf ids from the home slice (worker: "similar")
     // Launch time from the launcher (true cold start), else QML load.
     readonly property bool launched: Number(Quickshell.env("OPC_STORE_T0")) > 0
     readonly property real startedAt: Number(Quickshell.env("OPC_STORE_T0")) || Date.now()
@@ -33,9 +37,8 @@ Singleton {
     })
 
     // --- data -------------------------------------------------------------------------
-    property var data: null // home payload (lib/service.mjs homePayload)
-    property bool homeFromCache: false
-    property bool loaded: false // worker has the snapshot
+    property var data: null // home payload (lib/data.mjs fromHome)
+    property bool loaded: false // worker has the search columns
     property bool indexed: false
     property var timings: ({})
     property int total: data ? data.total : 0
@@ -88,7 +91,7 @@ Singleton {
             timings = Object.assign({}, timings, {
                 homeAt: Date.now() - startedAt
             });
-            console.info("store: home ready", timings.homeAt, "ms", homeFromCache ? "(disk cache)" : "(worker)");
+            console.info("store: home ready", timings.homeAt, "ms (verified bundle", timings.verify, "ms, home slice", timings.homeMap, "ms)");
         }
     }
 
@@ -250,21 +253,42 @@ Singleton {
         });
     }
 
+    // Detail documents: verified against store-details.json by the verifier, which prints
+    // the document (fetching it first when apiBase is https). One request at a time; the
+    // newest wins. `purpose` "detail" fills the detail view, "rank" completes dialogRec.
     function loadDetail(r) {
-        if (!r.report) {
+        if (!r || !r.report) {
             detailLoading = false;
             return;
         }
         detailLoading = true;
-        const base = meta.apiBase || "";
-        if (/^https:\/\//.test(base)) {
-            detailFetch.target = cacheDir + "/api/" + r.id + ".json";
-            detailFetch.command = ["sh", "-c", "mkdir -p \"$(dirname \"$2\")\" && curl -fsSL --proto =https --max-time 20 -o \"$2.part\" -- \"$1\" && mv -f \"$2.part\" \"$2\"", "fetch", base.replace(/\/+$/, "") + "/" + r.report, detailFetch.target];
-            detailFetch.running = true;
-        } else {
-            const dir = snapshotPath.replace(/\/[^/]*$/, "");
-            detailFile.path = (dir + "/" + base + "/" + r.report).replace(/\/{2,}/g, "/");
+        requestDetail(r.id);
+    }
+
+    function requestDetail(id) {
+        detailProc.wanted = id;
+        if (detailProc.running)
+            return;
+        detailProc.pluginId = id;
+        detailProc.command = [verifier, "detail", snapshotPath, id];
+        detailProc.running = true;
+    }
+
+    function detailArrived(id, text) {
+        let d = null;
+        try {
+            d = Data.fromDetail(JSON.parse(text), meta.providers || [], meta.imageBase || "");
+        } catch (e) {
+            console.warn("store: bad detail document:", id, e);
         }
+        if (rec && rec.id === id) {
+            detail = d;
+            detailLoading = false;
+            if (d && d.listing)
+                rec = Object.assign({}, rec, d.listing);
+        }
+        if (dialogRec && dialogRec.id === id && d && d.listing)
+            dialogRec = Object.assign({}, dialogRec, d.listing);
     }
 
     function showToast(t) {
@@ -304,6 +328,9 @@ Singleton {
     function rankDialog(r) {
         dialogRec = r;
         dialog = "rank";
+        // Search rows carry no factor details; the detail document's listing does.
+        if (r && !r.complete && r.report)
+            requestDetail(r.id);
     }
 
     function runBench() {
@@ -318,20 +345,13 @@ Singleton {
     function onReply(m) {
         switch (m.type) {
         case "loaded":
-            homeFromCache = false;
-            data = m.home;
             loaded = true;
             timings = Object.assign({}, timings, {
                 parse: m.ms.parse,
                 map: m.ms.map,
                 loadedAt: Date.now() - startedAt
             });
-            console.info("store: snapshot in worker: parse", m.ms.parse, "ms, map", m.ms.map, "ms,", m.home.total, "plugins; loaded at", timings.loadedAt, "ms");
-            homeCache.setText(JSON.stringify({
-                path: snapshotPath,
-                version: m.home.meta.version,
-                home: m.home
-            }));
+            console.info("store: search columns in worker: parse", m.ms.parse, "ms, map", m.ms.map, "ms,", m.total, "plugins; loaded at", timings.loadedAt, "ms");
             send({
                 type: "index"
             });
@@ -350,10 +370,30 @@ Singleton {
             indexed = true;
             timings = Object.assign({}, timings, {
                 index: m.ms.index,
-                warm: m.ms.warm,
                 indexedAt: Date.now() - startedAt
             });
-            console.info("store: index", m.ms.index, "ms, warm", m.ms.warm, "ms; searchable at", timings.indexedAt, "ms");
+            console.info("store: index", m.ms.index, "ms; searchable at", timings.indexedAt, "ms");
+            send({
+                type: "warm",
+                from: 0,
+                count: 4
+            });
+            break;
+        case "warmed":
+            timings = Object.assign({}, timings, {
+                warm: (timings.warm || 0) + m.ms
+            });
+            if (m.next >= 0)
+                send({
+                    type: "warm",
+                    from: m.next,
+                    count: 4
+                });
+            else {
+                console.info("store: warm", timings.warm, "ms; warm at", Date.now() - startedAt, "ms");
+                if (Quickshell.env("OPC_STORE_BENCH") === "1")
+                    runBench(); // tools/coldstart.sh --bench
+            }
             break;
         case "results":
             if (m.seq !== seq)
@@ -386,6 +426,7 @@ Singleton {
             break;
         case "bench":
             bench = m;
+            console.info("store: bench", m.n, "keystrokes p50", m.p50, "p95", m.p95, "p99", m.p99, "ms");
             break;
         case "error":
             console.warn("store worker:", m.on, m.error);
@@ -405,27 +446,56 @@ Singleton {
             Qt.callLater(() => store.wantSnapshot = true);
     }
 
-    FileView {
-        id: snapshot
+    // 1. verify the manifest + the home slice (real bundle only; the dev data ships with the
+    // app). Exit 3 = no bundle here. The search columns are verified in step 3.
+    Process {
+        id: verify
 
-        path: store.wantSnapshot ? store.snapshotPath : ""
+        running: !store.usingDev
+        command: [store.verifier, "bundle", store.realBundle, "home"]
+        stderr: StdioCollector {
+            id: verifyErr
+        }
+        onExited: code => {
+            store.timings = Object.assign({}, store.timings, {
+                verify: Date.now() - store.startedAt
+            });
+            if (code === 0) {
+                homeFile.path = store.snapshotPath + "/store-home.json";
+            } else if (code === 3) {
+                // No published bundle on this machine yet: the bundled dev data, flagged "dev".
+                store.usingDev = true;
+                store.snapshotPath = store.devBundle;
+                homeFile.path = store.devBundle + "/store-home.json";
+            } else {
+                store.verifyError = verifyErr.text.trim() || "verification failed";
+                console.warn("store: refusing the snapshot:", store.verifyError);
+            }
+        }
+    }
+
+    // 2. home slice, mapped here (small) so the first frame shows content.
+    FileView {
+        id: homeFile
+
+        path: store.dev ? store.devBundle + "/store-home.json" : ""
         printErrors: false
         onLoaded: {
-            store.timings = Object.assign({}, store.timings, {
-                readAt: Date.now() - store.startedAt
-            });
-            store.send({
-                type: "load",
-                text: text()
-            });
+            const t0 = Date.now();
+            try {
+                const raw = JSON.parse(text());
+                store.homeShelves = raw.shelves ? raw.shelves.byCategory || {} : {};
+                const d = Data.fromHome(raw);
+                store.timings = Object.assign({}, store.timings, {
+                    homeMap: Date.now() - t0
+                });
+                store.data = d;
+            } catch (e) {
+                store.verifyError = "bad home slice: " + e;
+            }
         }
         onLoadFailed: {
-            if (!store.usingDev) {
-                // No published snapshot on this machine yet: fall back to the bundled
-                // dev snapshot, flagged "dev" in the header.
-                store.usingDev = true;
-                store.snapshotPath = store.devSnapshot;
-            } else if (!unpack.tried) {
+            if (store.usingDev && !unpack.tried) {
                 unpack.tried = true;
                 unpack.running = true;
             } else {
@@ -434,76 +504,76 @@ Singleton {
         }
     }
 
-    // store/dev/store.json is committed gzipped; unpack it on first run.
+    // store/dev/*.json are committed gzipped; unpack them on first run.
     Process {
         id: unpack
 
         property bool tried: false
 
-        command: ["gunzip", "-kf", store.devSnapshot + ".gz"]
+        command: ["gunzip", "-kf", store.devBundle + "/store-home.json.gz", store.devBundle + "/store-search.json.gz"]
         onExited: code => {
             if (code === 0)
-                snapshot.reload();
+                homeFile.reload();
             else
                 store.snapshotMissing = true;
         }
     }
 
-    FileView {
-        id: homeCache
-
-        path: store.cacheDir + "/store-home.json"
-        printErrors: false
-        atomicWrites: true
-        onLoaded: {
-            if (store.data)
-                return;
-            try {
-                const c = JSON.parse(text());
-                if (c.path === store.snapshotPath && c.home) {
-                    store.homeFromCache = true;
-                    store.data = c.home;
-                    store.timings = Object.assign({}, store.timings, {
-                        homeCacheAt: Date.now() - store.startedAt
-                    });
-                    return;
-                }
-            } catch (e) {
-                console.warn("store: ignoring home cache:", e);
-            }
-            store.wantSnapshot = true;
-        }
-        onLoadFailed: store.wantSnapshot = true
-    }
-
-    FileView {
-        id: detailFile
-
-        printErrors: false
-        onLoaded: {
-            try {
-                store.detail = Data.fromDetail(JSON.parse(text()), store.meta.providers || []);
-            } catch (e) {
-                console.warn("store: bad detail file:", e);
-                store.detail = null;
-            }
-            store.detailLoading = false;
-        }
-        onLoadFailed: store.detailLoading = false
-    }
+    // 3. after the first frame: verify the search columns + detail hashes, then -> worker.
+    property bool searchVerified: false
 
     Process {
-        id: detailFetch
+        id: verifySearch
 
-        property string target: ""
-
+        running: store.wantSnapshot && !!store.data && !store.usingDev && !store.searchVerified && store.verifyError === ""
+        command: [store.verifier, "bundle", store.snapshotPath, "search", "details"]
+        stderr: StdioCollector {
+            id: verifySearchErr
+        }
         onExited: code => {
-            if (code === 0) {
-                detailFile.path = "";
-                detailFile.path = target;
-            } else {
+            if (code === 0)
+                store.searchVerified = true;
+            else
+                store.verifyError = verifySearchErr.text.trim() || "search file failed verification";
+        }
+    }
+
+    FileView {
+        id: searchFile
+
+        path: store.wantSnapshot && store.data && (store.usingDev || store.searchVerified) ? store.snapshotPath + "/store-search.json" : ""
+        printErrors: false
+        onLoaded: {
+            store.timings = Object.assign({}, store.timings, {
+                readAt: Date.now() - store.startedAt
+            });
+            store.send({
+                type: "load",
+                text: text(),
+                imageBase: store.meta.imageBase || "",
+                byCategory: store.homeShelves
+            });
+        }
+        onLoadFailed: console.warn("store: no search file in", store.snapshotPath)
+    }
+
+    // 4. detail documents, verified per plugin.
+    Process {
+        id: detailProc
+
+        property string pluginId: ""
+        property string wanted: ""
+
+        stdout: StdioCollector {
+            id: detailOut
+        }
+        onExited: code => {
+            if (code === 0)
+                store.detailArrived(pluginId, detailOut.text);
+            else if (store.rec && store.rec.id === pluginId)
                 store.detailLoading = false;
-            }
+            if (wanted !== pluginId)
+                store.requestDetail(wanted);
         }
     }
 

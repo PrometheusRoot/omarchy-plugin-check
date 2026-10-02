@@ -1,16 +1,20 @@
-// Shared by the node tests and dev tools: the committed dev snapshot is gzipped
-// (store/dev/store.json.gz); `just store-dev` unpacks it next to itself for the QML app
-// (store.json is git-ignored).
+// Shared by the node tests and dev tools: the committed dev data is the client bundle of a
+// real snapshot build (store/dev/, ADR-0032; refreshed by tools/dev-bundle.sh). Home and
+// search are gzipped; the app unpacks them next to themselves (git-ignored).
 import { existsSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 
 export const devDir = new URL("../dev/", import.meta.url).pathname;
 
-export function devSnapshotText() {
-  if (existsSync(`${devDir}store.json`)) return readFileSync(`${devDir}store.json`, "utf8");
-  return gunzipSync(readFileSync(`${devDir}store.json.gz`)).toString("utf8");
+function text(name) {
+  if (existsSync(`${devDir}${name}`)) return readFileSync(`${devDir}${name}`, "utf8");
+  return gunzipSync(readFileSync(`${devDir}${name}.gz`)).toString("utf8");
 }
 
+export const devHomeText = () => text("store-home.json");
+export const devSearchText = () => text("store-search.json");
+
 export function devDetail(id) {
-  return JSON.parse(readFileSync(`${devDir}api/plugins/${id}.json`, "utf8"));
+  const home = JSON.parse(devHomeText());
+  return JSON.parse(readFileSync(`${devDir}${home.apiBase.replace(/\/+$/, "")}/plugins/${id}.json`, "utf8"));
 }

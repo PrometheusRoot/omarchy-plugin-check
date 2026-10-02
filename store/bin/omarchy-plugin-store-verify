@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Verify the store's client bundle before the app parses any of it (ADR-0032, ADR-0028).
+#   omarchy-plugin-store-verify bundle DIR [ROLE...]
+#                                                 manifest signature, kind, expiry, rollback, then
+#                                                 sha256 + size of the files with these roles
+#                                                 (default: home search details); prints
+#                                                 "ok version=V dev=D" (exit 0), the reason (exit 1),
+#                                                 or exit 3 when DIR holds no bundle at all
+#   omarchy-plugin-store-verify detail DIR ID    prints plugins/ID.json (local, or fetched from an
+#                                                 https apiBase into the cache) iff its sha256 is
+#                                                 the one store-details.json lists
+# Keys: $OPC_STORE_ALLOWED_SIGNERS, else the production allowed_signers; the DEV key only with
+# OPC_STORE_DEV_KEYS=1 (or the app's --dev, OPC_STORE_DEV=1). Rollback state:
+# $OPC_STORE_VERIFY_STATE, else ${XDG_STATE_HOME:-~/.local/state}/omarchy-plugin-check/store-bundle-version.
+set -euo pipefail
+
+# why: this runs on every cold start; parameter expansion instead of dirname/cd subshells.
+self=$(readlink -f "$0")
+here=${self%/*}
+keys="$here/../../spec/keys"
+[[ -d $keys ]] || keys="$here/../keys"
+ns=omarchy-plugin-check-snapshot
+principal=omarchy-plugin-check
+state="${OPC_STORE_VERIFY_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-plugin-check/store-bundle-version}"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/omarchy-plugin-check/api"
+
+die() {
+  echo "store-verify: $*" >&2
+  exit 1
+}
+
+signers() {
+  if [[ -n ${OPC_STORE_ALLOWED_SIGNERS:-} ]]; then
+    echo "$OPC_STORE_ALLOWED_SIGNERS"
+  elif [[ ${OPC_STORE_DEV_KEYS:-} == 1 || ${OPC_STORE_DEV:-} == 1 ]]; then
+    echo "$keys/allowed_signers.dev"
+  else
+    echo "$keys/allowed_signers"
+  fi
+}
+
+bundle() {
+  local dir=$1 m="$1/store-manifest.json" allowed roles
+  shift
+  local r
+  roles=""
+  for r in ${@:-home search details}; do
+    [[ $r =~ ^[a-z]+$ ]] || die "bad role: $r"
+    roles+="${roles:+,}\"$r\""
+  done
+  roles="[$roles]"
+  allowed=$(signers)
+  if [[ ! -f $m ]]; then
+    echo "store-verify: no bundle in $dir" >&2
+    exit 3
+  fi
+  [[ -f $m.sig ]] || die "unsigned manifest in $dir"
+  [[ -f $allowed ]] || die "no allowed_signers ($allowed); set OPC_STORE_DEV_KEYS=1 for a DEV snapshot"
+  ssh-keygen -Y verify -f "$allowed" -I "$principal" -n "$ns" -s "$m.sig" < "$m" > /dev/null 2>&1 \
+    || die "bad manifest signature"
+  local last=0
+  [[ -f $state ]] && last=$(< "$state")
+  # kind, expiry and rollback; then "version dev" and one "size sha256 path" line per file the
+  # app reads (one jq, one stat, one sha256sum: this runs on every cold start).
+  local out
+  out=$(jq -er --argjson last "${last:-0}" --argjson roles "$roles" '
+    if .kind != "omarchy-plugin-check/store-manifest" then error("not a store manifest")
+    elif (.expires | fromdateiso8601) <= now then error("expired at \(.expires)")
+    elif .version < $last then error("rollback: version \(.version) < \($last)")
+    else "\(.version) \(.dev)", (.files[] | select(.role as $r | $roles | index($r)) | "\(.size) \(.sha256) \(.path)") end' "$m" 2>&1) \
+    || die "${out#jq: error (at *): }"
+  local version dev size sum path sizes=() sums="" paths=()
+  {
+    read -r version dev
+    while read -r size sum path; do
+      [[ $path =~ ^[a-z0-9][a-z0-9._-]*\.json$ && $sum =~ ^[0-9a-f]{64}$ ]] || die "bad entry in manifest: $path"
+      sizes+=("$size")
+      paths+=("$path")
+      sums+="$sum  $path"$'\n'
+    done
+  } <<< "$out"
+  cd "$dir"
+  [[ $(stat -c %s -- "${paths[@]}" 2> /dev/null | tr '\n' ' ') == "${sizes[*]} " ]] || die "a file is missing or its size differs from the manifest"
+  printf '%s' "$sums" | sha256sum --check --strict --quiet - > /dev/null 2>&1 || die "a file's sha256 differs from the manifest"
+  if ((version > last)); then
+    mkdir -p "${state%/*}"
+    printf '%s\n' "$version" > "$state.tmp" && mv -f "$state.tmp" "$state"
+  fi
+  echo "ok version=$version dev=$dev"
+}
+
+detail() {
+  local dir=$1 id=$2 sum base file
+  [[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "bad plugin id"
+  sum=$(jq -er --arg id "$id" '.docs[$id] // empty' "$dir/store-details.json") || die "$id: no detail document"
+  base=$(jq -r '.apiBase' "$dir/store-home.json")
+  if [[ $base == https://* ]]; then
+    file="$cache/$id.json"
+    if [[ ! -f $file || $(sha256sum < "$file") != "$sum  -" ]]; then
+      mkdir -p "$cache"
+      curl -fsSL --proto =https --max-time 20 -o "$file.part" -- "${base%/}/plugins/$id.json" || die "$id: fetch failed"
+      mv -f "$file.part" "$file"
+    fi
+  else
+    file="$dir/${base%/}/plugins/$id.json"
+  fi
+  [[ $(sha256sum < "$file") == "$sum  -" ]] || die "$id: sha256 differs from store-details.json"
+  cat "$file"
+}
+
+case "${1:-}" in
+  bundle) bundle "${2:?DIR}" "${@:3}" ;;
+  detail) detail "${2:?DIR}" "${3:?ID}" ;;
+  *)
+    echo "usage: omarchy-plugin-store-verify bundle DIR [ROLE...] | detail DIR ID" >&2
+    exit 2
+    ;;
+esac
