@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # omarchy-plugin-check: commit-bound safety verdicts for Omarchy plugins, from one signed
-# snapshot verified locally (ADR-0013, ADR-0028, ADR-0032). Bash is the glue only: every
+# snapshot verified locally (ADR-0013, ADR-0028, ADR-0033). Bash is the glue only: every
 # JSON decision lives in lib/*.jq (pure, tested by tests/*.bats).
 #
 #   omarchy-plugin-check <git-url|id>                      verdict card      (exit 0, 3 unlisted)
 #   omarchy-plugin-check --add [--enable] [--pin] [--force] [--yes] <git-url|id>
 #                                                          gated `omarchy plugin add` (2 refused)
 #   omarchy-plugin-check status [--json]                   installed plugins vs reviewed commits
-#   omarchy-plugin-check update [<url|path>]               fetch + verify the signed snapshot
+#   omarchy-plugin-check update [<url|path>]               fetch + verify the signed snapshot / bundle
 #   omarchy-plugin-check setup [--uninstall]               CLI link + Omarchy menu entries
 # Exit: 0 ok · 1 error/aborted · 2 refused (blocked, retired) · 3 unlisted · 4 no verified snapshot
 set -Eeuo pipefail
@@ -23,7 +23,7 @@ config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy-plugin-check"
 plugins_dir="${HOME}/.config/omarchy/plugins"
 changes_md="${HOME}/.config/omarchy/CHANGES.md"
 menu_file="${HOME}/.config/omarchy/extensions/omarchy-menu.jsonc"
-default_url="https://prometheusroot.github.io/omarchy-plugin-check/store.json"
+default_url="https://prometheusroot.github.io/omarchy-plugin-check/store-manifest.json"
 omarchy=${OPC_OMARCHY:-omarchy}
 export GIT_TERMINAL_PROMPT=0
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -oBatchMode=yes}"
@@ -53,7 +53,11 @@ usage() {
   sed -n '6,13p' "${self}" | sed 's/^# \{0,1\}//'
 }
 
-# ---------------------------------------------------------------- snapshot (ADR-0028)
+# ---------------------------------------------------------------- snapshot (ADR-0028, bundle: ADR-0032)
+#
+# Trust comes from one signature: the client bundle's store-manifest.json (it lists sha256 + size
+# of store.json, store-details.json, the store app's files), or, for a bare snapshot,
+# store.json.sig. JSON is parsed only after its signature (or its listed sha256) checks out.
 
 signers() {
   local out="${tmp}/allowed_signers"
@@ -66,43 +70,84 @@ signers() {
   printf '%s' "${out}"
 }
 
-# verify STORE SIG MIN-VERSION -> prints the rejection reason, empty when trusted; leaves the
-# snapshot's metadata in ${tmp}/meta.json (cached in ${cache}/meta.json by content hash, so
-# the 5 MB file is parsed once per snapshot, not once per command).
-verify() {
-  local store=$1 sig=$2 min=$3 allowed sha
+devok() { if [[ ${OPC_DEV_KEYS:-0} == 1 ]]; then echo true; else echo false; fi; }
+
+sigcheck() { # sigcheck FILE SIG -> the reason, or nothing when the signature is good
+  local allowed
   allowed=$(signers)
-  grep -q '^[^#[:space:]]' "${allowed}" || {
+  if ! grep -q '^[^#[:space:]]' "${allowed}"; then
     say "no trusted signing key yet (the production key is not published; OPC_DEV_KEYS=1 for development)"
-    return
-  }
-  [[ -s ${store} && -s ${sig} ]] || {
-    say "snapshot or signature missing"
-    return
-  }
-  if ! ssh-keygen -Y verify -f "${allowed}" -I omarchy-plugin-check -n omarchy-plugin-check-snapshot \
-    -s "${sig}" < "${store}" > /dev/null 2>&1; then
-    say "bad signature"
+  elif [[ ! -s $1 || ! -s $2 ]]; then
+    say "${1##*/} or its signature is missing"
+  elif ! ssh-keygen -Y verify -f "${allowed}" -I omarchy-plugin-check -n omarchy-plugin-check-snapshot \
+    -s "$2" < "$1" > /dev/null 2>&1; then
+    say "bad signature (${1##*/})"
+  fi
+}
+
+accept() { # accept KIND JSON MIN -> the reason, or nothing (kind, expiry, rollback, dev)
+  jq -r --arg kind "$1" --argjson min "$3" --argjson devok "$(devok)" '
+    if .kind != $kind or .schemaVersion != 1 then "not a \($kind | split("/") | last)"
+    elif (.expires | fromdateiso8601) <= now then "expired at \(.expires)"
+    elif .version < $min then "rollback: version \(.version) is older than the accepted \($min)"
+    elif .dev and ($devok | not) then "a development snapshot (dev: true); OPC_DEV_KEYS=1 accepts it"
+    else "" end' "$2"
+}
+
+files_ok() { # files_ok DIR [ROLE...] -> the reason, or nothing when every listed file matches
+  local dir=$1 size sum path
+  while read -r size sum path; do
+    [[ ${path} =~ ^[a-z0-9][a-z0-9._-]*\.json$ && ${sum} =~ ^[0-9a-f]{64}$ ]] || {
+      say "bad manifest entry: ${path}"
+      return
+    }
+    [[ -f ${dir}/${path} && $(stat -c %s -- "${dir}/${path}") == "${size}" &&
+    $(sha256sum < "${dir}/${path}") == "${sum}  -" ]] || {
+      say "${path} does not match the signed manifest"
+      return
+    }
+  done < <(jq -r '.files[] | select(($ARGS.positional | length) == 0 or (.role | IN($ARGS.positional[])))
+    | "\(.size) \(.sha256) \(.path)"' --args "${@:2}" < "${dir}/store-manifest.json")
+}
+
+# verify DIR MIN -> the reason, or nothing when DIR/store.json is trusted; leaves the snapshot's
+# metadata in ${tmp}/meta.json (cached in ${cache}/meta.json by sha256: the 5 MB file is parsed
+# once per snapshot, not once per command).
+verify() {
+  local dir=$1 min=$2 reason sha
+  if [[ -s ${dir}/store-manifest.json ]]; then
+    reason=$(sigcheck "${dir}/store-manifest.json" "${dir}/store-manifest.json.sig")
+    [[ -n ${reason} ]] || reason=$(accept omarchy-plugin-check/store-manifest "${dir}/store-manifest.json" "${min}")
+    [[ -n ${reason} ]] || reason=$(files_ok "${dir}" store details)
+    [[ -n ${reason} ]] || jq -e '.files | any(.role == "store")' "${dir}/store-manifest.json" > /dev/null \
+      || reason="the manifest lists no store.json"
+  else
+    reason=$(sigcheck "${dir}/store.json" "${dir}/store.json.sig")
+  fi
+  if [[ -n ${reason} ]]; then
+    say "${reason}"
     return
   fi
-  # Only now parse the authenticated JSON.
-  sha=$(sha256sum < "${store}")
+  sha=$(sha256sum < "${dir}/store.json")
   sha=${sha%% *}
   if [[ "$(jq -r '.sha // empty' "${cache}/meta.json" 2> /dev/null || true)" == "${sha}" ]]; then
     cp -- "${cache}/meta.json" "${tmp}/meta.json"
   else
     jq -c --arg sha "${sha}" '{sha: $sha, kind, schemaVersion, version, generatedAt, expires, dev,
-      plugins: (.plugins | length)}' "${store}" > "${tmp}/meta.json"
+      plugins: (.plugins | length)}' "${dir}/store.json" > "${tmp}/meta.json"
   fi
-  jq -r --argjson min "${min}" --argjson devok "$([[ ${OPC_DEV_KEYS:-0} == 1 ]] && echo true || echo false)" '
-    if .kind != "omarchy-plugin-check/store" or .schemaVersion != 1 then "not a store snapshot"
-    elif (.expires | fromdateiso8601) <= now then "expired at \(.expires)"
-    elif .version < $min then "rollback: version \(.version) is older than the accepted \($min)"
-    elif .dev and ($devok | not) then "a development snapshot (dev: true); OPC_DEV_KEYS=1 accepts it"
-    else "" end' "${tmp}/meta.json"
+  accept omarchy-plugin-check/store "${tmp}/meta.json" "${min}"
 }
 
-accepted_version() { jq -r '.version // 0' "${state_dir}/state.json" 2> /dev/null || echo 0; }
+# Highest version accepted so far, by this CLI (state.json) or the store app (store-bundle-version).
+accepted_version() {
+  local a b
+  a=$(jq -r '.version // 0' "${state_dir}/state.json" 2> /dev/null || echo 0)
+  b=$(cat -- "${state_dir}/store-bundle-version" 2> /dev/null || echo 0)
+  [[ ${a} =~ ^[0-9]+$ ]] || a=0
+  [[ ${b} =~ ^[0-9]+$ ]] || b=0
+  echo $((a > b ? a : b))
+}
 source_url() { jq -r '.source // empty' "${state_dir}/state.json" 2> /dev/null || true; }
 
 # load: snap_ok=1 and ${cache}/index.json current, or snap_ok=0 and snap_error set.
@@ -112,7 +157,7 @@ index="${cache}/index.json"
 load() {
   local reason sha
   [[ -s ${cache}/store.json ]] || return 0
-  reason=$(verify "${cache}/store.json" "${cache}/store.json.sig" "$(accepted_version)")
+  reason=$(verify "${cache}" "$(accepted_version)")
   if [[ -n ${reason} ]]; then
     snap_error=${reason}
     return 0
@@ -135,48 +180,94 @@ fetch() { # fetch SRC DEST
   esac
 }
 
+# update [SRC]: SRC names store-manifest.json (the client bundle), store.json (bundle next to it
+# when there is one, else the bare signed snapshot) or their directory.
 cmd_update() {
-  local src=${1:-${OPC_SNAPSHOT_URL:-${default_url}}} reason meta
-  mkdir -p -- "${cache}" "${state_dir}"
-  fetch "${src}" "${tmp}/store.json" || die "could not fetch ${src}" 4
-  fetch "${src}.sig" "${tmp}/store.json.sig" || die "could not fetch ${src}.sig" 4
-  reason=$(verify "${tmp}/store.json" "${tmp}/store.json.sig" "$(accepted_version)")
+  local src=${1:-${OPC_SNAPSHOT_URL:-${default_url}}} base stage="${tmp}/stage" reason meta size sum path f version
+  [[ ${src} != http://* ]] || die "refusing a plain http snapshot URL: ${src}"
+  case ${src} in
+    *.json) base=${src%/*} ;;
+    *) base=${src%/} ;;
+  esac
+  mkdir -p -- "${cache}" "${state_dir}" "${stage}"
+  if fetch "${base}/store-manifest.json" "${stage}/store-manifest.json" 2> /dev/null \
+    && fetch "${base}/store-manifest.json.sig" "${stage}/store-manifest.json.sig" 2> /dev/null; then
+    reason=$(sigcheck "${stage}/store-manifest.json" "${stage}/store-manifest.json.sig")
+    [[ -z ${reason} ]] || die "snapshot rejected: ${reason} (kept the last accepted one)" 4
+    while read -r size sum path; do
+      [[ ${path} =~ ^[a-z0-9][a-z0-9._-]*\.json$ ]] || die "snapshot rejected: bad manifest entry ${path}" 4
+      fetch "${base}/${path}" "${stage}/${path}" || die "could not fetch ${base}/${path}" 4
+    done < <(jq -r '.files[] | "\(.size) \(.sha256) \(.path)"' "${stage}/store-manifest.json")
+    reason=$(files_ok "${stage}")
+    [[ -z ${reason} ]] || die "snapshot rejected: ${reason} (kept the last accepted one)" 4
+  else
+    [[ ${src} != *store-manifest.json ]] || die "could not fetch ${src}" 4
+    rm -f -- "${stage}"/store-manifest.json*
+    fetch "${base}/store.json" "${stage}/store.json" || die "could not fetch ${base}/store.json" 4
+    fetch "${base}/store.json.sig" "${stage}/store.json.sig" || die "could not fetch ${base}/store.json.sig" 4
+  fi
+  reason=$(verify "${stage}" "$(accepted_version)")
   [[ -z ${reason} ]] || die "snapshot rejected: ${reason} (kept the last accepted one)" 4
-  meta=$(jq -c --arg src "${src}" '{version, generatedAt, expires, dev, plugins, source: $src,
-    acceptedAt: (now | todate)}' "${tmp}/meta.json")
-  mv -f -- "${tmp}/store.json.sig" "${cache}/store.json.sig"
-  mv -f -- "${tmp}/store.json" "${cache}/store.json"
+  # A bare snapshot must not sit next to an older bundle's manifest; a bundle keeps store.json.sig
+  # only if it came along.
+  rm -f -- "${cache}/store-manifest.json" "${cache}/store-manifest.json.sig" "${cache}/store.json.sig" "${cache}/store-details.json"
+  for f in "${stage}"/*; do
+    [[ ${f} == */store-manifest.json* ]] || mv -f -- "${f}" "${cache}/"
+  done
+  if [[ -e ${stage}/store-manifest.json ]]; then
+    fetch "${base}/store.json.sig" "${cache}/store.json.sig" 2> /dev/null || true
+    mv -f -- "${stage}/store-manifest.json.sig" "${stage}/store-manifest.json" "${cache}/"
+  fi
+  # Next to a local bundle the store app reads detail documents from ${cache}/api/v1.
+  if [[ ${base} != https://* && -d ${base#file://}/api/v1 ]]; then
+    mkdir -p -- "${cache}/api"
+    ln -sfn -- "$(readlink -f -- "${base#file://}/api/v1")" "${cache}/api/v1"
+  fi
+  meta=$(jq -c --arg src "${base}" --argjson bundle "$([[ -e ${cache}/store-manifest.json ]] && echo true || echo false)" \
+    '{version, generatedAt, expires, dev, plugins, bundle: $bundle, source: $src, acceptedAt: (now | todate)}' "${tmp}/meta.json")
   printf '%s\n' "${meta}" > "${tmp}/state.json" && mv -f -- "${tmp}/state.json" "${state_dir}/state.json"
+  version=$(jq -r .version <<< "${meta}")
+  if ((version > $(cat -- "${state_dir}/store-bundle-version" 2> /dev/null || echo 0))); then
+    printf '%s\n' "${version}" > "${tmp}/sbv" && mv -f -- "${tmp}/sbv" "${state_dir}/store-bundle-version"
+  fi
   load
   [[ ${snap_ok} == 1 ]] || die "snapshot rejected after install: ${snap_error}" 4
   ok "$(jq -r '"snapshot verified · version \(.version) · generated \(.generatedAt) · \(.plugins) plugins"
-    + (if .dev then " · dev key" else "" end)' <<< "${meta}")"
+    + (if .bundle then " · client bundle" else "" end) + (if .dev then " · dev key" else "" end)' <<< "${meta}")"
 }
 
-# The unsigned per-plugin view (criteria, findings, tree): next to a local snapshot, or
-# fetched once into the cache for an https one (`check` only; `status` never fetches).
+# The per-plugin detail document (criteria, findings, tree). With a bundle its sha256 must be
+# the one the signed store-details.json lists, else it is ignored; a bare snapshot has no such
+# list, so its documents are used for display and the tree only (ADR-0033). Next to a local
+# snapshot, or fetched once into the cache for an https one (`check` only; `status` never fetches).
 detail() { # detail ID ALLOW_FETCH -> path or nothing
-  local id=$1 src base api out
+  local id=$1 src api out want=""
   [[ ${id} =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${id} != *..* ]] || return 0
   src=$(source_url)
   api=$(jq -r '.apiBase // "api/v1/"' "${index}")
   [[ ${api} != /* && ${api} != *..* ]] || return 0
-  base=${src%/*}
+  if [[ -s ${cache}/store-details.json ]]; then
+    want=$(jq -r --arg id "${id}" '.docs[$id] // empty' "${cache}/store-details.json")
+    [[ -n ${want} ]] || return 0
+  fi
   case ${src} in
     https://*)
       out="${cache}/api/${id}.json"
-      if [[ ! -s ${out} || ${out} -ot ${cache}/store.json ]] && [[ $2 == 1 && ${OPC_OFFLINE:-0} != 1 ]]; then
+      if [[ ! -s ${out} || (-z ${want} && ${out} -ot ${cache}/store.json) || (-n ${want} && $(sha256sum < "${out}") != "${want}  -") ]] \
+        && [[ $2 == 1 && ${OPC_OFFLINE:-0} != 1 ]]; then
         mkdir -p -- "${cache}/api"
-        if curl --proto '=https' -fsSL --max-time 20 -o "${out}.part" -- "${base}/${api}plugins/${id}.json"; then
+        if curl --proto '=https' -fsSL --max-time 20 -o "${out}.part" -- "${src}/${api}plugins/${id}.json"; then
           mv -f -- "${out}.part" "${out}"
         else
           rm -f -- "${out}.part"
         fi
       fi
       ;;
-    *) out="${base#file://}/${api}plugins/${id}.json" ;;
+    *) out="${src#file://}/${api}plugins/${id}.json" ;;
   esac
-  if [[ -s ${out} ]]; then printf '%s' "${out}"; fi
+  [[ -s ${out} ]] || return 0
+  [[ -z ${want} || $(sha256sum < "${out}") == "${want}  -" ]] || return 0
+  printf '%s' "${out}"
 }
 
 # ---------------------------------------------------------------- local + upstream git

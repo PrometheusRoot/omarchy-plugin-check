@@ -75,8 +75,30 @@ make_snapshot() {
     sed -e "s/@SAFE_COMMIT@/${safe}/g" -e "s/@SAFE_TREE@/${SAFE_TREE_OVERRIDE:-${tree}}/g" "${f}" \
       > "${SNAP}/api/v1/plugins/${f##*/}"
   done
-  rm -f -- "${SNAP}/store.json.sig"
+  rm -f -- "${SNAP}"/*.sig "${SNAP}/store-manifest.json" "${SNAP}/store-details.json"
   ssh-keygen -q -Y sign -f "${KEY}" -n omarchy-plugin-check-snapshot "${SNAP}/store.json"
+  [[ ${LEGACY:-0} == 1 ]] || make_bundle
+}
+
+# The client bundle (ADR-0032): store-details.json lists each detail document's sha256, one
+# signed store-manifest.json lists sha256 + size of store.json and store-details.json.
+make_bundle() {
+  local f
+  jq -n --argjson v "$(jq .version "${SNAP}/store.json")" '{schemaVersion: 1,
+    kind: "omarchy-plugin-check/store-details", version: $v, docs: {}}' > "${SNAP}/store-details.json"
+  for f in "${SNAP}"/api/v1/plugins/*.json; do
+    jq --arg id "$(basename "${f}" .json)" --arg sum "$(sha256sum < "${f}" | cut -d' ' -f1)" \
+      '.docs[$id] = $sum' "${SNAP}/store-details.json" > "${SNAP}/d.tmp" && mv "${SNAP}/d.tmp" "${SNAP}/store-details.json"
+  done
+  jq '{schemaVersion, kind: "omarchy-plugin-check/store-manifest", version, generatedAt, expires, dev, files: []}' \
+    "${SNAP}/store.json" > "${SNAP}/store-manifest.json"
+  for f in store.json store-details.json; do
+    jq --arg p "${f}" --arg role "$([[ ${f} == store.json ]] && echo store || echo details)" \
+      --arg sum "$(sha256sum < "${SNAP}/${f}" | cut -d' ' -f1)" --argjson size "$(stat -c %s "${SNAP}/${f}")" \
+      '.files += [{role: $role, path: $p, sha256: $sum, size: $size}]' "${SNAP}/store-manifest.json" > "${SNAP}/m.tmp"
+    mv "${SNAP}/m.tmp" "${SNAP}/store-manifest.json"
+  done
+  ssh-keygen -q -Y sign -f "${KEY}" -n omarchy-plugin-check-snapshot "${SNAP}/store-manifest.json"
 }
 
 # The standard world: two listed remotes, a signed snapshot, dev trust, accepted.

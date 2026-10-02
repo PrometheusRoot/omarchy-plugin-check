@@ -32,7 +32,7 @@ def findings_line:
 def snap_line:
   ((G("ok") + " verified") | c("ok")) + " · \(.age | age) old"
   + (if .catalog then " · catalog \(.catalog[5:10])" else "" end)
-  + (if .dev then " · " + ("dev key" | c("warn_dim")) else "" end);
+  + (if .dev then " · " + ("dev key" | c("caution")) else "" end);
 
 def commit_line:
   if .reviewed.commit == null then "none reviewed" | c("dim")
@@ -58,7 +58,8 @@ def headline:
 def card:
   [ "╭─ " + (.name | c("head")) + " · " + (.id | c("dim")),
     "│  " + headline,
-    (if .timeReviewed then "│  " + ("reviewed \(.timeReviewed[0:10])" | c("dim")) else empty end),
+    ([(if .risk != null then "risk \(.risk)/100" else empty end), (if .timeReviewed then "reviewed \(.timeReviewed[0:10])" else empty end)]
+     | if length > 0 then "│  " + (join("  ") | c("dim")) else empty end),
     "│",
     (.providers as $p | if ($p | length) == 0 then row("prov"; "—" | c("dim"))
      else (row("prov"; $p[0] | provider_line), ($p[1:][] | "│         " + provider_line)) end),
@@ -80,7 +81,7 @@ def unlisted:
 
 def refusal:
   [ "  " + (.state | st) + "  " + (.name | c("head")) + "  " + (.id | c("dim")),
-    "  " + ([.providers[] | provider_line] | join("   ")),
+    "  " + (if .risk != null then "risk \(.risk)/100   " else "" end) + ([.providers[] | provider_line] | join("   ")),
     "  " + (.snapshot | snap_line),
     (if (.findings.blocking | length) > 0 then
       "", "  hard-fails \(.findings.blocking | length)",

@@ -48,7 +48,8 @@ include "opc";
       capped: (($pmeta[.key].tier // "") | IN("community", "unsigned"))
     }] | sort_by(.tier | IN("core", "verified") | not),
     counted: ([($row.verdict.providers // {}) | keys[] | select(($pmeta[.].tier // "") | IN("core", "verified"))] | length),
-    criteria: ($trusted | first | .criteria // null),
+    criteria: ($row.verdict.criteria // ($trusted | first | .criteria) // null),
+    risk: ($row.verdict.risk // null),
     timeReviewed: ($trusted | map(.timeReviewed) | max),
     summary: ($trusted | first | .summary // null),
     findings: {

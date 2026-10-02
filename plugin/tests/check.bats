@@ -98,3 +98,24 @@ setup() {
   [[ ${output} == *$'\e[32m'* ]]
   [[ ${output} == *"$(printf '\U000F0CC8') safe"* ]]
 }
+
+@test "client bundle: a detail document whose sha256 is not the listed one is ignored" {
+  echo '{"id": "test.safe-clock", "providers": []}' > "${SNAP}/api/v1/plugins/test.safe-clock.json"
+  run "${CLI}" test.safe-clock
+  [ "${status}" -eq 0 ]
+  [[ ${output} == *"✓ safe"* ]]
+  [[ ${output} != *"find "* ]]
+}
+
+@test "risk and criteria come from the signed row when it carries them" {
+  jq '(.plugins[] | select(.id == "test.caution-mail") | .verdict) += {risk: 13, criteria: {checked: ["no-exec"], failed: ["no-exec"]}}' \
+    "${SNAP}/store.json" > "${SNAP}/s" && mv "${SNAP}/s" "${SNAP}/store.json"
+  jq '.version = 1001' "${SNAP}/store.json" > "${SNAP}/s" && mv "${SNAP}/s" "${SNAP}/store.json"
+  rm -f "${SNAP}"/*.sig
+  ssh-keygen -q -Y sign -f "${KEY}" -n omarchy-plugin-check-snapshot "${SNAP}/store.json"
+  make_bundle
+  "${CLI}" update "${SNAP}"
+  run "${CLI}" test.caution-mail
+  [[ ${output} == *"risk 13/100"* ]]
+  [[ ${output} == *"crit   ✗no-exec"* ]]
+}
