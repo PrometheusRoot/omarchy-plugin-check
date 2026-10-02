@@ -16,8 +16,18 @@ plugin compares what you install (or have installed) with what was reviewed, com
   the attested subject, or rolls the add back. Logs to `~/.config/omarchy/CHANGES.md` if you
   keep one.
 - **`omarchy-plugin-check status [--json]`**: every plugin in `~/.config/omarchy/plugins` with
-  its state: safe, caution, risky, blocked, unreviewed, stale, unlisted or retired. Writes
+  its state: safe, caution, risky, blocked, unreviewed, stale, unlisted or retired, and a
+  `pin` hint when a reviewed update (or a roll back) is available. Writes
   `~/.cache/omarchy-plugin-check/status.json` for the panel. Never uses the network.
+- **`omarchy-plugin-check pin [--yes] <id>`**: move an installed plugin to the snapshot's reviewed
+  commit: forward when a newer commit was reviewed, back when your HEAD is past the review. Shows
+  the direction, the files changed and the verdict change, asks (`--yes` for scripts), checks out
+  detached, verifies commit and tree against the signed snapshot, validates, rescans
+  `omarchy-shell` and logs to CHANGES.md. Fetches from the listed repository, never a former
+  `origin`. Refuses blocked (2), retired (2), unlisted (3) and unreviewed plugins. If only
+  upstream moved, it says the plugin is stale and changes nothing. Use it instead of
+  `omarchy plugin update` for pinned plugins: that one fast-forwards even a detached HEAD to
+  unreviewed upstream HEAD (ADR-0035).
 - **`omarchy-plugin-check update [<url|path>]`**: fetch and verify the signed client bundle
   (`store-manifest.json` + `.sig`, then sha256 and size of every file it lists, `store.json`
   included) or a bare signed `store.json`; expired or rolled-back snapshots are refused and the

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake `omarchy-shell` for the bats tests: records the call (pin rescans the plugins).
+set -Eeuo pipefail
+printf 'omarchy-shell %s\n' "$*" >> "${FAKE_LOG:?}"

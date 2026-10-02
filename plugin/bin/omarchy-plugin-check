@@ -7,6 +7,7 @@
 #   omarchy-plugin-check --add [--enable] [--pin] [--force] [--yes] <git-url|id>
 #                                                          gated `omarchy plugin add` (2 refused)
 #   omarchy-plugin-check status [--json]                   installed plugins vs reviewed commits
+#   omarchy-plugin-check pin [--yes] <id>                  move an installed plugin to its reviewed commit
 #   omarchy-plugin-check update [<url|path>]               fetch + verify the signed snapshot / bundle
 #   omarchy-plugin-check setup [--uninstall]               CLI link + Omarchy menu entries
 # Exit: 0 ok · 1 error/aborted · 2 refused (blocked, retired) · 3 unlisted · 4 no verified snapshot
@@ -51,7 +52,7 @@ interactive() { [[ -t 0 && -t 1 ]]; }
 J() { jq -L "${lib}" "$@"; }
 
 usage() {
-  sed -n '6,13p' "${self}" | sed 's/^# \{0,1\}//'
+  sed -n '6,14p' "${self}" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------- snapshot (ADR-0028, bundle: ADR-0032)
@@ -430,7 +431,7 @@ cmd_add() {
         render card
         [[ ${row} != null || ${pin} == 0 ]] || warn "unlisted: nothing reviewed, so nothing to pin"
         if [[ ${pin} == 1 && ${row} != null ]]; then
-          say "  --pin will check out $(jq -r '.reviewed.commit[0:7]' "${tmp}/model.json") (detached HEAD; \`omarchy plugin update\` won't move it)"
+          say "  --pin will check out $(jq -r '.reviewed.commit[0:7]' "${tmp}/model.json") (detached HEAD; update it with \`omarchy-plugin-check pin\`)"
         fi
         confirm "Plugin is ${reason}. Continue?" || die "aborted"
         ;;
@@ -466,6 +467,7 @@ cmd_add() {
       die "pinned checkout does not match the attested subject (commit ${commit:0:7}${tree:+, tree ${tree:0:7}})"
     fi
     msg="pinned ${commit:0:7}${tree:+ (tree =)}"
+    record_pin "$(jq -r '.id' <<< "${row}")" "${commit}" "$(jq -r '.combined // "unknown"' "${tmp}/model.json")"
   else
     head=$(gitq "${plugins_dir}/${id}" rev-parse HEAD || true)
     msg="at ${head:0:7}"
@@ -499,7 +501,7 @@ log_change() { # log_change ID URL SHA PINNED
   entry=$(jq -r --arg id "$1" --arg url "$2" --arg sha "$3" --arg pinned "$4" '
     "### Plugin: \(.name // $id) (`\($id)`)\n"
     + "- **Source:** \($url) — commit `\($sha[0:7])`"
-    + (if $pinned == "1" then " (pinned to the reviewed commit; detached HEAD, `omarchy plugin update` will not move it)" else "" end) + "\n"
+    + (if $pinned == "1" then " (pinned to the reviewed commit, detached HEAD; update with `omarchy-plugin-check pin \($id)`, not `omarchy plugin update`, which moves it to unreviewed upstream HEAD)" else "" end) + "\n"
     + "- **Installed:** `omarchy-plugin-check --add` (gated `omarchy plugin add`)\n"
     + "- **Reviewed:** \(.state) per omarchy-plugin-check"
     + (if .reviewed.commit then " (reviewed commit `\(.reviewed.commit[0:7])`; providers \(.providers | map("\(.id) \(.verdict)") | join(", ")))" else " (no review)" end)
@@ -559,6 +561,113 @@ cmd_status() {
   else
     J -r --argjson color "${color}" --arg glyphs "${glyphs}" -f "${lib}/table.jq" "${cache}/status.json"
   fi
+}
+
+# pins.json: the last commit this CLI pinned per listed plugin, with its verdict then; `pin`
+# shows "verdict then → verdict now" from it.
+record_pin() { # record_pin ID COMMIT VERDICT
+  local f="${state_dir}/pins.json"
+  mkdir -p -- "${state_dir}"
+  jq -c --arg id "$1" --arg c "$2" --arg v "$3" --argjson ver "$(jq -r '.version // 0' "${index}")" \
+    '.[$id] = {commit: $c, verdict: $v, version: $ver, at: (now | todate)}' \
+    <(cat -- "${f}" 2> /dev/null || echo '{}') > "${tmp}/pins.json" && mv -f -- "${tmp}/pins.json" "${f}"
+}
+
+# pin [--yes] ID: check out the snapshot's reviewed commit in an installed checkout (ADR-0035).
+# Fetches from the listed repository (never a former origin), shows direction, verdict change and
+# files changed, asks, checks out detached, verifies commit + tree, validates, rescans the shell.
+cmd_pin() {
+  local id="" a dir plan prev repo commit tree head upstream rel facts old ref listed verdict
+  yes=0
+  for a in "$@"; do
+    case ${a} in
+      --yes | -y) yes=1 ;;
+      -*) die "unknown pin option: ${a}" ;;
+      *)
+        [[ -z ${id} ]] || die "unexpected argument: ${a}"
+        id=${a}
+        ;;
+    esac
+  done
+  [[ -n ${id} ]] || die "usage: omarchy-plugin-check pin [--yes] <installed plugin id>"
+  [[ ${id} =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${id} != *..* ]] || die "not a plugin id: ${id}"
+  dir="${plugins_dir}/${id}"
+  [[ -d ${dir}/.git ]] || die "${id} is not a git checkout in ${plugins_dir/#"${HOME}"/\~}"
+
+  step 1 "verify snapshot signature"
+  load
+  [[ ${snap_ok} == 1 ]] || die "no verified snapshot: ${snap_error}" 4
+  local_json "${dir}" | jq -s -c . > "${tmp}/local.json"
+  : > "${tmp}/details.json"
+  status_doc "$(jq -n -c '{ok: true, error: null, url: "", now: (now | floor)}')" '{}'
+  jq -c '.plugins[0]' "${tmp}/status.json" > "${tmp}/entry.json"
+  listed=$(jq -r '.listedId // ""' "${tmp}/entry.json")
+  prev=$(jq -c --arg id "${listed}" '.[$id] // null' "${state_dir}/pins.json" 2> /dev/null || echo null)
+  pin_plan null "${prev}"
+  repo=$(jq -r '.repo' "${tmp}/entry.json")
+  commit=$(jq -r '.reviewed.commit' "${tmp}/entry.json")
+  tree=$(jq -r '.reviewed.tree // empty' "${tmp}/entry.json")
+  verdict=$(jq -r '.combined' "${tmp}/entry.json")
+  [[ ${repo} =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "the listed repository is not a GitHub URL: ${repo}"
+  [[ ${OPC_OFFLINE:-0} != 1 ]] || die "pin fetches from ${repo}; not with OPC_OFFLINE=1"
+
+  step 2 "fetch ${repo}"
+  gitq "${dir}" fetch --quiet --no-tags -- "${repo}" HEAD || die "could not fetch ${repo}"
+  upstream=$(gitq "${dir}" rev-parse --verify -q FETCH_HEAD || true)
+  gitq "${dir}" cat-file -e "${commit}^{commit}" || gitq "${dir}" fetch --quiet --no-tags -- "${repo}" "${commit}" \
+    || die "the reviewed commit ${commit:0:7} is not in ${repo} any more"
+
+  step 3 "compare with the reviewed commit ${commit:0:7}"
+  head=$(gitq "${dir}" rev-parse HEAD)
+  rel=$(relation "${dir}" "${commit}")
+  facts=$(jq -n -c --arg head "${head}" --arg up "${upstream}" --arg rel "${rel:-diverged}" \
+    --arg fwd "$(gitq "${dir}" rev-list --count "HEAD..${commit}")" --arg back "$(gitq "${dir}" rev-list --count "${commit}..HEAD")" \
+    --arg stat "$(gitq "${dir}" diff --no-ext-diff --no-textconv --shortstat HEAD "${commit}")" \
+    --arg tree "$(gitq "${dir}" rev-parse "${commit}^{tree}")" \
+    --arg files "$(gitq "${dir}" diff --no-ext-diff --no-textconv --name-status HEAD "${commit}")" \
+    '{head: $head, upstream: (if $up == "" then null else $up end), rel: $rel, forward: ($fwd | tonumber),
+      back: ($back | tonumber), stat: ($stat | ltrimstr(" ")), tree: $tree,
+      files: ($files | split("\n") | map(select(. != "")))}')
+  pin_plan "${facts}" "${prev}"
+  [[ $(jq -r .action <<< "${plan}") == confirm ]] || return 0
+  confirm "$(jq -r .prompt <<< "${plan}")" || die "aborted"
+
+  step 4 "check out ${commit:0:7} and verify commit + tree"
+  old=${head}
+  ref=$(gitq "${dir}" symbolic-ref -q --short HEAD || true)
+  gitq "${dir}" -c advice.detachedHead=false checkout --quiet --detach "${commit}" \
+    || die "could not check out ${commit:0:7} in ${dir} (local changes?)"
+  if [[ $(gitq "${dir}" rev-parse HEAD) != "${commit}" ]] \
+    || [[ -n ${tree} && $(gitq "${dir}" rev-parse 'HEAD^{tree}') != "${tree}" ]] \
+    || ! "${omarchy}" plugin validate "${dir}" > /dev/null; then
+    gitq "${dir}" -c advice.detachedHead=false checkout --quiet "${ref:-${old}}" || warn "could not restore ${old:0:7} in ${dir}"
+    die "the checkout does not match the attested subject or fails validation; restored ${old:0:7}"
+  fi
+
+  step 5 "rescan omarchy-shell"
+  "${OPC_OMARCHY_SHELL:-omarchy-shell}" shell rescanPlugins > /dev/null 2>&1 \
+    || warn "could not reach omarchy-shell; run: omarchy-shell shell rescanPlugins"
+
+  step 6 "log to ~/.config/omarchy/CHANGES.md"
+  record_pin "${listed}" "${commit}" "${verdict}"
+  if [[ -f ${changes_md} ]]; then
+    jq -r --arg old "${old}" --arg dir "${dir/#"${HOME}"/\~}" --argjson v "$(jq -r '.version // 0' "${index}")" '
+      "### Plugin: \(.name) (`\(.id)`) re-pinned\n"
+      + "- **Source:** \(.repo) — `\($old[0:7])` → `\(.reviewed.commit[0:7])` (the reviewed commit; detached HEAD)\n"
+      + "- **Changed:** `omarchy-plugin-check pin \(.id)`\n"
+      + "- **Reviewed:** \(.combined) per omarchy-plugin-check; snapshot version \($v).\n"
+      + "- **Undo:** `git -C \($dir) checkout \($old[0:7])`"' "${tmp}/entry.json" > "${tmp}/entry.md"
+    jq -R -s -j --arg date "$(date +%F)" --rawfile entry "${tmp}/entry.md" -f "${lib}/changes.jq" "${changes_md}" > "${tmp}/changes.md"
+    cat -- "${tmp}/changes.md" > "${changes_md}"
+  fi
+  cmd_status --json > /dev/null || true
+  ok "pinned ${id} ${old:0:7} → ${commit:0:7}${tree:+ (tree =)} · ${verdict}$([[ -f ${changes_md} ]] && echo " · logged to ~/.config/omarchy/CHANGES.md")"
+}
+
+pin_plan() { # pin_plan FACTS PREV -> sets ${plan}; prints its lines; exits on a refusal
+  plan=$(J -c --argjson facts "$1" --argjson prev "$2" -f "${lib}/pin.jq" "${tmp}/entry.json")
+  jq -r '.lines[] | "  " + .' <<< "${plan}"
+  if [[ $(jq -r .action <<< "${plan}") == refuse ]]; then exit "$(jq -r .code <<< "${plan}")"; fi
 }
 
 menu_entries() {
@@ -626,6 +735,7 @@ main() {
     --version) say "omarchy-plugin-check ${VERSION}" ;;
     --add) cmd_add "$@" ;;
     status) cmd_status "${@:2}" ;;
+    pin) cmd_pin "${@:2}" ;;
     update) cmd_update "${@:2}" ;;
     setup) cmd_setup "${@:2}" ;;
     check) cmd_check "${@:2}" ;;

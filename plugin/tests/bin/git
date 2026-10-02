@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fake `git` for the bats tests: `ls-remote` answers from the local fake remotes (or fails
-# with FAKE_LS_REMOTE_FAIL=1); everything else is the real git ($REAL_GIT).
+# with FAKE_LS_REMOTE_FAIL=1), `fetch` reads them too; everything else is the real git ($REAL_GIT).
 set -Eeuo pipefail
 if [[ ${1:-} == ls-remote ]]; then
   [[ ${FAKE_LS_REMOTE_FAIL:-0} != 1 ]] || exit 128
@@ -8,5 +8,15 @@ if [[ ${1:-} == ls-remote ]]; then
   url=${3:?}
   repo="${FAKE_REMOTES:?}/${url#https://github.com/}"
   exec "${REAL_GIT:?}" ls-remote -- "${repo%.git}.git" "${@:4}"
+fi
+# `fetch` (pin): https://github.com/<o>/<r> comes from the local fake remote.
+if [[ " $* " == *" fetch "* ]]; then
+  printf 'git fetch %s\n' "${*: -2}" >> "${FAKE_LOG:?}"
+  args=()
+  for a in "$@"; do
+    if [[ ${a} == https://github.com/* ]]; then a="${FAKE_REMOTES:?}/${a#https://github.com/}.git"; fi
+    args+=("${a}")
+  done
+  exec "${REAL_GIT:?}" "${args[@]}"
 fi
 exec "${REAL_GIT:?}" "$@"

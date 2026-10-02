@@ -154,7 +154,7 @@ installed() { echo "${HOME}/.config/omarchy/plugins/$1"; }
   [[ ${output} == *"logged to ~/.config/omarchy/CHANGES.md"* ]]
   run cat "${HOME}/.config/omarchy/CHANGES.md"
   [[ ${output} == *$'---\n\n## '"$(date +%F)"$'\n\n### Plugin: Safe Clock (`test.safe-clock`)\n- **Source:** https://github.com/test/safe-clock — commit `'* ]]
-  [[ ${output} == *"(pinned to the reviewed commit; detached HEAD"* ]]
+  [[ ${output} == *'(pinned to the reviewed commit, detached HEAD; update with `omarchy-plugin-check pin test.safe-clock`, not `omarchy plugin update`'* ]]
   [[ ${output} == *"- **Reviewed:** safe per omarchy-plugin-check (reviewed commit"* ]]
   [[ ${output} == *'- **Undo:** `omarchy plugin remove test.safe-clock`'$'\n\n## 2026-01-01'* ]]
 }
