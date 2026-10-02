@@ -1,0 +1,41 @@
+module qs.ui
+Box 1.0 Box.qml
+BrowseView 1.0 BrowseView.qml
+Btn 1.0 Btn.qml
+Card 1.0 Card.qml
+CatTile 1.0 CatTile.qml
+Chip 1.0 Chip.qml
+CritChips 1.0 CritChips.qml
+DetailView 1.0 DetailView.qml
+Dialog 1.0 Dialog.qml
+Footer 1.0 Footer.qml
+Glyph 1.0 Glyph.qml
+Header 1.0 Header.qml
+Hero 1.0 Hero.qml
+HomeView 1.0 HomeView.qml
+Ico 1.0 Ico.qml
+singleton ImageCache 1.0 ImageCache.qml
+InstallButton 1.0 InstallButton.qml
+InstalledRow 1.0 InstalledRow.qml
+InstalledView 1.0 InstalledView.qml
+singleton Installer 1.0 Installer.qml
+Kbd 1.0 Kbd.qml
+KV 1.0 KV.qml
+Mark 1.0 Mark.qml
+Meter 1.0 Meter.qml
+Overlays 1.0 Overlays.qml
+ProviderLine 1.0 ProviderLine.qml
+ProviderRow 1.0 ProviderRow.qml
+ResultRow 1.0 ResultRow.qml
+SearchView 1.0 SearchView.qml
+Shelf 1.0 Shelf.qml
+Sparkline 1.0 Sparkline.qml
+StatRow 1.0 StatRow.qml
+StatusView 1.0 StatusView.qml
+singleton Store 1.0 Store.qml
+StoreWindow 1.0 StoreWindow.qml
+Table 1.0 Table.qml
+singleton Theme 1.0 Theme.qml
+Thumb 1.0 Thumb.qml
+Tip 1.0 Tip.qml
+Txt 1.0 Txt.qml

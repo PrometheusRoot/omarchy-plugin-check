@@ -29,3 +29,7 @@ mutants/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Store app: unpacked dev snapshot (store/dev/store.json.gz is committed)
+store/dev/store.json
+store/.qmlls.ini
