@@ -31,8 +31,15 @@ while read -r name version url sha; do
     *.zip) python3 -m zipfile -e "$file" "$tmp" ;;
     *) cp "$file" "$tmp/$name" ;;
   esac
-  bin="$(find "$tmp" -type f -name "$name" | head -n1)"
-  install -m 0755 "$bin" "$prefix/bin/$name"
+  if [[ $name == bats ]]; then
+    # why: bats is a bash tree (bin/ + libexec/ + lib/), not one binary; use its installer.
+    rm -rf "$prefix/opt/bats"
+    "$(find "$tmp" -maxdepth 2 -name install.sh | head -n1)" "$prefix/opt/bats" > /dev/null
+    ln -sfn "../opt/bats/bin/bats" "$prefix/bin/bats"
+  else
+    bin="$(find "$tmp" -type f -name "$name" | head -n1)"
+    install -m 0755 "$bin" "$prefix/bin/$name"
+  fi
   echo "$version" > "$prefix/bin/.$name.version"
   rm -rf "$tmp"
   echo "installed $name $version"

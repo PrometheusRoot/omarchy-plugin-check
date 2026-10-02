@@ -25,6 +25,7 @@ actionlint = { version = "1.7.12", job = "workflow lint", status = "active" }
 shellcheck = { version = "0.11.0", job = "shell lint (also a scanner; pinned in tools.lock)", status = "active" }
 zizmor = { version = "1.30.1", job = "workflow security audit (also a scanner)", status = "active" }
 hadolint = { version = "2.14", job = "Dockerfile lint", status = "planned" }
+bats = { version = "1.14.0", job = "shell tests (plugin CLI, plugin/tests/*.bats)", status = "active" }
 packer = { version = "1.16.1", job = "P2 VM snapshot (validate + fmt offline; build needs the hcloud token)", status = "active" }
 
 [qml]
