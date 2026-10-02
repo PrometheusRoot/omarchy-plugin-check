@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fake omarchy-git-url-check: the real one's two refusals (option, transport helper).
+[[ -n ${1:-} && $1 != -* && ! $1 =~ ^[A-Za-z0-9][A-Za-z0-9+.-]*:: ]] || {
+  echo "omarchy-git-url-check: refused $1" >&2
+  exit 1
+}

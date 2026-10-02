@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "kind": "omarchy-plugin-check/store",
+  "version": 0,
+  "generatedAt": "",
+  "expires": "",
+  "dev": false,
+  "catalog": {"generatedAt": "2026-10-01T00:00:00Z", "plugins": 9, "retired": 1, "builtin": 1},
+  "imageBase": "https://plugins.omarchy.org/assets/img/plugins/",
+  "apiBase": "api/v1/",
+  "providers": [
+    {"id": "opc", "name": "omarchy-plugin-check", "tier": "core", "verification": "sigstore", "rows": 4},
+    {"id": "marketplace", "name": "Omarchy marketplace baseline", "tier": "unsigned", "verification": "unsigned", "rows": 5}
+  ],
+  "ranking": {"version": "test", "factors": [], "gates": {}, "statsGeneratedAt": null},
+  "shelves": {"top": [], "trending": [], "new": [], "updated": [], "safePicks": [], "byCategory": {}},
+  "categories": [],
+  "plugins": [
+    {"id": "test.safe-clock", "name": "Safe Clock", "author": "test", "cat": "Widgets", "kind": "Bar widget", "license": "MIT",
+     "repo": "https://github.com/test/safe-clock",
+     "verdict": {"combined": "safe", "basis": "trusted", "providers": {"opc": "safe", "marketplace": "safe"}, "commit": "@SAFE_COMMIT@"}, "report": true},
+    {"id": "test.caution-mail", "name": "Caution Mail", "repo": "https://github.com/test/caution-mail",
+     "verdict": {"combined": "caution", "basis": "trusted", "providers": {"opc": "caution"}, "commit": "@CAUTION_COMMIT@"}, "report": true},
+    {"id": "io.github.example-fixtures.blocked-widget", "name": "Weather Pro", "repo": "https://github.com/example-fixtures/blocked-widget",
+     "verdict": {"combined": "blocked", "basis": "trusted", "providers": {"opc": "blocked", "marketplace": "safe"}, "commit": "1111111111111111111111111111111111111111"}, "report": true},
+    {"id": "test.risky-bar", "name": "Risky Bar", "repo": "https://github.com/test/risky-bar",
+     "verdict": {"combined": "risky", "basis": "trusted", "providers": {"opc": "risky"}, "contested": true, "commit": "2222222222222222222222222222222222222222"}},
+    {"id": "test.retired", "name": "Old Netspeed", "repo": "https://github.com/test/retired", "state": "retired",
+     "verdict": {"combined": "unknown", "basis": "none", "providers": {}}},
+    {"id": "test.untrusted", "name": "Baseline Only", "repo": "https://github.com/test/untrusted",
+     "verdict": {"combined": "caution", "basis": "untrusted", "providers": {"marketplace": "caution"}}},
+    {"id": "test.suite-a", "name": "Suite A", "repo": "https://github.com/test/suite", "path": "a",
+     "verdict": {"combined": "unknown", "basis": "none", "providers": {}}},
+    {"id": "test.suite-b", "name": "Suite B", "repo": "https://github.com/test/suite", "path": "b",
+     "verdict": {"combined": "unknown", "basis": "none", "providers": {}}},
+    {"id": "test.manual", "name": "Manual Only", "repo": "https://github.com/test/manual", "install": "",
+     "verdict": {"combined": "unknown", "basis": "none", "providers": {}}},
+    {"id": "omarchy.clock", "name": "Clock", "repo": "https://github.com/omacom/omarchy", "path": "shell/plugins/panels/clock", "state": "builtin",
+     "verdict": {"combined": "unknown", "basis": "none", "providers": {}}}
+  ]
+}

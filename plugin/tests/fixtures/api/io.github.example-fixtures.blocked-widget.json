@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1, "id": "io.github.example-fixtures.blocked-widget", "name": "Weather Pro",
+  "repo": "https://github.com/example-fixtures/blocked-widget", "listingState": "listed",
+  "combined": {"verdict": "blocked", "basis": "trusted", "contested": false, "commits": ["1111111111111111111111111111111111111111"], "reasons": []},
+  "providers": [
+    {"provider": "opc", "tier": "core", "verification": "sigstore", "commit": "1111111111111111111111111111111111111111",
+     "tree": "3333333333333333333333333333333333333333", "verdict": "blocked", "effectiveVerdict": "blocked", "counted": true,
+     "timeReviewed": "2026-09-30T10:00:00Z", "summary": "blocked: 6 hard-fails",
+     "criteria": {"checked": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-secrets", "no-obfuscation"],
+                  "failed": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-secrets", "no-obfuscation"], "notChecked": []},
+     "findings": [
+       {"category": "exec", "severity": "critical", "confidence": 1, "blocking": true, "message": "remote script piped to shell", "locations": [{"path": "BarWidget.qml", "startLine": 21}]},
+       {"category": "obfuscation", "severity": "critical", "confidence": 1, "blocking": true, "message": "base64 payload piped to shell", "locations": [{"path": "tools/setup.sh", "startLine": 9}]},
+       {"category": "persistence", "severity": "high", "confidence": 1, "blocking": true, "message": "undeclared hyprland exec-once", "locations": [{"path": "tools/setup.sh", "startLine": 12}]},
+       {"category": "persistence", "severity": "high", "confidence": 1, "blocking": true, "message": "undeclared systemd user unit", "locations": [{"path": "tools/setup.sh", "startLine": 20}]},
+       {"category": "secrets", "severity": "critical", "confidence": 1, "blocking": true, "message": "reads ssh key, posts it remotely", "locations": [{"path": "tools/setup.sh", "startLine": 24}]},
+       {"category": "obfuscation", "severity": "high", "confidence": 1, "blocking": true, "message": "bidi control char in source", "locations": [{"path": "tools/obf.sh", "startLine": 8}]}
+     ]}
+  ]
+}

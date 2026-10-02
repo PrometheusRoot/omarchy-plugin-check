@@ -1,0 +1,12 @@
+# Tests: the plugin's rules (../.shellcheckrc, which this file replaces) plus bats idioms.
+enable=all
+external-sources=true
+# why: jq programs are single-quoted on purpose; their $vars are jq's, not the shell's.
+disable=SC2016
+# why: as in ../.shellcheckrc, substitutions feed assertions that fail on empty values.
+disable=SC2310,SC2312
+# why: bats sets $status/$output/$BATS_* and helpers.bash sets the fixture variables at
+# runtime; shellcheck cannot follow `load`.
+disable=SC2154
+# why: `[ ]` is the bats idiom; bats reports the failing line either way.
+disable=SC2292

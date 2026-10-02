@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1, "id": "test.safe-clock", "name": "Safe Clock", "repo": "https://github.com/test/safe-clock",
+  "listingState": "listed", "marketplaceUrl": "https://plugins.omarchy.org/plugin.html?id=test.safe-clock",
+  "combined": {"verdict": "safe", "basis": "trusted", "contested": false, "commits": ["@SAFE_COMMIT@"], "reasons": []},
+  "providers": [
+    {"provider": "opc", "tier": "core", "verification": "sigstore", "commit": "@SAFE_COMMIT@", "tree": "@SAFE_TREE@",
+     "verdict": "safe", "effectiveVerdict": "safe", "counted": true, "timeReviewed": "2026-10-01T10:00:00Z",
+     "summary": "safe: no findings above info",
+     "criteria": {"checked": ["safe-to-run", "no-network", "no-exec"], "failed": [], "notChecked": ["reviewed-by-human"]},
+     "findings": [{"category": "quality", "severity": "info", "message": "unused import", "locations": [{"path": "Clock.qml", "startLine": 3}]}]}
+  ]
+}

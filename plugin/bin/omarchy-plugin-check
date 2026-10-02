@@ -1,0 +1,616 @@
+#!/usr/bin/env bash
+# omarchy-plugin-check: commit-bound safety verdicts for Omarchy plugins, from one signed
+# snapshot verified locally (ADR-0013, ADR-0028, ADR-0033). Bash is the glue only: every
+# JSON decision lives in lib/*.jq (pure, tested by tests/*.bats).
+#
+#   omarchy-plugin-check <git-url|id>                      verdict card      (exit 0, 3 unlisted)
+#   omarchy-plugin-check --add [--enable] [--pin] [--force] [--yes] <git-url|id>
+#                                                          gated `omarchy plugin add` (2 refused)
+#   omarchy-plugin-check status [--json]                   installed plugins vs reviewed commits
+#   omarchy-plugin-check update [<url|path>]               fetch + verify the signed snapshot / bundle
+#   omarchy-plugin-check setup [--uninstall]               CLI link + Omarchy menu entries
+# Exit: 0 ok · 1 error/aborted · 2 refused (blocked, retired) · 3 unlisted · 4 no verified snapshot
+set -Eeuo pipefail
+shopt -s nullglob
+
+readonly VERSION="0.1.0"
+self=$(readlink -f -- "${BASH_SOURCE[0]}")
+root=$(cd -- "$(dirname -- "${self}")/.." && pwd)
+lib="${root}/lib"
+cache="${XDG_CACHE_HOME:-${HOME}/.cache}/omarchy-plugin-check"
+state_dir="${XDG_STATE_HOME:-${HOME}/.local/state}/omarchy-plugin-check"
+config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy-plugin-check"
+plugins_dir="${HOME}/.config/omarchy/plugins"
+changes_md="${HOME}/.config/omarchy/CHANGES.md"
+menu_file="${HOME}/.config/omarchy/extensions/omarchy-menu.jsonc"
+default_url="https://prometheusroot.github.io/omarchy-plugin-check/store-manifest.json"
+omarchy=${OPC_OMARCHY:-omarchy}
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -oBatchMode=yes}"
+
+tmp=$(mktemp -d)
+trap 'rm -rf -- "${tmp}"' EXIT
+
+color=false
+if [[ ${OPC_COLOR:-auto} == always ]] || { [[ ${OPC_COLOR:-auto} == auto && -t 1 && -z ${NO_COLOR:-} ]]; }; then
+  color=true
+fi
+glyphs=${OPC_GLYPHS:-nerd}
+
+say() { printf '%s\n' "$*"; }
+paint() { if [[ ${color} == true ]]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi; }
+ok() { say "  $(paint 32 "✓ $*")"; }
+warn() { say "  $(paint 33 "! $*")" >&2; }
+die() {
+  say "omarchy-plugin-check: $1" >&2
+  exit "${2:-1}"
+}
+step() { say "$(paint 2 "[$1/6] $2")"; }
+interactive() { [[ -t 0 && -t 1 ]]; }
+J() { jq -L "${lib}" "$@"; }
+
+usage() {
+  sed -n '6,13p' "${self}" | sed 's/^# \{0,1\}//'
+}
+
+# ---------------------------------------------------------------- snapshot (ADR-0028, bundle: ADR-0032)
+#
+# Trust comes from one signature: the client bundle's store-manifest.json (it lists sha256 + size
+# of store.json, store-details.json, the store app's files), or, for a bare snapshot,
+# store.json.sig. JSON is parsed only after its signature (or its listed sha256) checks out.
+
+signers() {
+  local out="${tmp}/allowed_signers"
+  cat -- "${root}/keys/allowed_signers" > "${out}"
+  if [[ ${OPC_DEV_KEYS:-0} == 1 ]]; then
+    local dev="${OPC_DEV_SIGNERS:-${config_dir}/allowed_signers.dev}"
+    [[ -r ${dev} ]] || die "OPC_DEV_KEYS=1 but no dev allowed_signers at ${dev} (OPC_DEV_SIGNERS)" 4
+    cat -- "${dev}" >> "${out}"
+  fi
+  printf '%s' "${out}"
+}
+
+devok() { if [[ ${OPC_DEV_KEYS:-0} == 1 ]]; then echo true; else echo false; fi; }
+
+sigcheck() { # sigcheck FILE SIG -> the reason, or nothing when the signature is good
+  local allowed
+  allowed=$(signers)
+  if ! grep -q '^[^#[:space:]]' "${allowed}"; then
+    say "no trusted signing key yet (the production key is not published; OPC_DEV_KEYS=1 for development)"
+  elif [[ ! -s $1 || ! -s $2 ]]; then
+    say "${1##*/} or its signature is missing"
+  elif ! ssh-keygen -Y verify -f "${allowed}" -I omarchy-plugin-check -n omarchy-plugin-check-snapshot \
+    -s "$2" < "$1" > /dev/null 2>&1; then
+    say "bad signature (${1##*/})"
+  fi
+}
+
+accept() { # accept KIND JSON MIN -> the reason, or nothing (kind, expiry, rollback, dev)
+  jq -r --arg kind "$1" --argjson min "$3" --argjson devok "$(devok)" '
+    if .kind != $kind or .schemaVersion != 1 then "not a \($kind | split("/") | last)"
+    elif (.expires | fromdateiso8601) <= now then "expired at \(.expires)"
+    elif .version < $min then "rollback: version \(.version) is older than the accepted \($min)"
+    elif .dev and ($devok | not) then "a development snapshot (dev: true); OPC_DEV_KEYS=1 accepts it"
+    else "" end' "$2"
+}
+
+files_ok() { # files_ok DIR [ROLE...] -> the reason, or nothing when every listed file matches
+  local dir=$1 size sum path
+  while read -r size sum path; do
+    [[ ${path} =~ ^[a-z0-9][a-z0-9._-]*\.json$ && ${sum} =~ ^[0-9a-f]{64}$ ]] || {
+      say "bad manifest entry: ${path}"
+      return
+    }
+    [[ -f ${dir}/${path} && $(stat -c %s -- "${dir}/${path}") == "${size}" &&
+    $(sha256sum < "${dir}/${path}") == "${sum}  -" ]] || {
+      say "${path} does not match the signed manifest"
+      return
+    }
+  done < <(jq -r '.files[] | select(($ARGS.positional | length) == 0 or (.role | IN($ARGS.positional[])))
+    | "\(.size) \(.sha256) \(.path)"' --args "${@:2}" < "${dir}/store-manifest.json")
+}
+
+# verify DIR MIN -> the reason, or nothing when DIR/store.json is trusted; leaves the snapshot's
+# metadata in ${tmp}/meta.json (cached in ${cache}/meta.json by sha256: the 5 MB file is parsed
+# once per snapshot, not once per command).
+verify() {
+  local dir=$1 min=$2 reason sha
+  if [[ -s ${dir}/store-manifest.json ]]; then
+    reason=$(sigcheck "${dir}/store-manifest.json" "${dir}/store-manifest.json.sig")
+    [[ -n ${reason} ]] || reason=$(accept omarchy-plugin-check/store-manifest "${dir}/store-manifest.json" "${min}")
+    [[ -n ${reason} ]] || reason=$(files_ok "${dir}" store details)
+    [[ -n ${reason} ]] || jq -e '.files | any(.role == "store")' "${dir}/store-manifest.json" > /dev/null \
+      || reason="the manifest lists no store.json"
+  else
+    reason=$(sigcheck "${dir}/store.json" "${dir}/store.json.sig")
+  fi
+  if [[ -n ${reason} ]]; then
+    say "${reason}"
+    return
+  fi
+  sha=$(sha256sum < "${dir}/store.json")
+  sha=${sha%% *}
+  if [[ "$(jq -r '.sha // empty' "${cache}/meta.json" 2> /dev/null || true)" == "${sha}" ]]; then
+    cp -- "${cache}/meta.json" "${tmp}/meta.json"
+  else
+    jq -c --arg sha "${sha}" '{sha: $sha, kind, schemaVersion, version, generatedAt, expires, dev,
+      plugins: (.plugins | length)}' "${dir}/store.json" > "${tmp}/meta.json"
+  fi
+  accept omarchy-plugin-check/store "${tmp}/meta.json" "${min}"
+}
+
+# Highest version accepted so far, by this CLI (state.json) or the store app (store-bundle-version).
+accepted_version() {
+  local a b
+  a=$(jq -r '.version // 0' "${state_dir}/state.json" 2> /dev/null || echo 0)
+  b=$(cat -- "${state_dir}/store-bundle-version" 2> /dev/null || echo 0)
+  [[ ${a} =~ ^[0-9]+$ ]] || a=0
+  [[ ${b} =~ ^[0-9]+$ ]] || b=0
+  echo $((a > b ? a : b))
+}
+source_url() { jq -r '.source // empty' "${state_dir}/state.json" 2> /dev/null || true; }
+
+# load: snap_ok=1 and ${cache}/index.json current, or snap_ok=0 and snap_error set.
+snap_ok=0
+snap_error="no snapshot yet: run omarchy-plugin-check update"
+index="${cache}/index.json"
+load() {
+  local reason sha
+  [[ -s ${cache}/store.json ]] || return 0
+  reason=$(verify "${cache}" "$(accepted_version)")
+  if [[ -n ${reason} ]]; then
+    snap_error=${reason}
+    return 0
+  fi
+  sha=$(jq -r .sha "${tmp}/meta.json")
+  if ! cmp -s -- "${tmp}/meta.json" "${cache}/meta.json" || [[ ! -s ${index} ]]; then
+    J -c --arg sha "${sha}" -f "${lib}/index.jq" "${cache}/store.json" > "${tmp}/index.json"
+    mv -f -- "${tmp}/index.json" "${index}"
+    cp -- "${tmp}/meta.json" "${cache}/meta.json"
+  fi
+  snap_ok=1
+}
+
+fetch() { # fetch SRC DEST
+  case $1 in
+    https://*) curl --proto '=https' --tlsv1.2 -fsSL --max-time 120 -o "$2" -- "$1" ;;
+    http://*) die "refusing a plain http snapshot URL: $1" ;;
+    file://*) cp -- "${1#file://}" "$2" ;;
+    *) cp -- "$1" "$2" ;;
+  esac
+}
+
+# update [SRC]: SRC names store-manifest.json (the client bundle), store.json (bundle next to it
+# when there is one, else the bare signed snapshot) or their directory.
+cmd_update() {
+  local src=${1:-${OPC_SNAPSHOT_URL:-${default_url}}} base stage="${tmp}/stage" reason meta size sum path f version
+  [[ ${src} != http://* ]] || die "refusing a plain http snapshot URL: ${src}"
+  case ${src} in
+    *.json) base=${src%/*} ;;
+    *) base=${src%/} ;;
+  esac
+  mkdir -p -- "${cache}" "${state_dir}" "${stage}"
+  if fetch "${base}/store-manifest.json" "${stage}/store-manifest.json" 2> /dev/null \
+    && fetch "${base}/store-manifest.json.sig" "${stage}/store-manifest.json.sig" 2> /dev/null; then
+    reason=$(sigcheck "${stage}/store-manifest.json" "${stage}/store-manifest.json.sig")
+    [[ -z ${reason} ]] || die "snapshot rejected: ${reason} (kept the last accepted one)" 4
+    while read -r size sum path; do
+      [[ ${path} =~ ^[a-z0-9][a-z0-9._-]*\.json$ ]] || die "snapshot rejected: bad manifest entry ${path}" 4
+      fetch "${base}/${path}" "${stage}/${path}" || die "could not fetch ${base}/${path}" 4
+    done < <(jq -r '.files[] | "\(.size) \(.sha256) \(.path)"' "${stage}/store-manifest.json")
+    reason=$(files_ok "${stage}")
+    [[ -z ${reason} ]] || die "snapshot rejected: ${reason} (kept the last accepted one)" 4
+  else
+    [[ ${src} != *store-manifest.json ]] || die "could not fetch ${src}" 4
+    rm -f -- "${stage}"/store-manifest.json*
+    fetch "${base}/store.json" "${stage}/store.json" || die "could not fetch ${base}/store.json" 4
+    fetch "${base}/store.json.sig" "${stage}/store.json.sig" || die "could not fetch ${base}/store.json.sig" 4
+  fi
+  reason=$(verify "${stage}" "$(accepted_version)")
+  [[ -z ${reason} ]] || die "snapshot rejected: ${reason} (kept the last accepted one)" 4
+  # A bare snapshot must not sit next to an older bundle's manifest; a bundle keeps store.json.sig
+  # only if it came along.
+  rm -f -- "${cache}/store-manifest.json" "${cache}/store-manifest.json.sig" "${cache}/store.json.sig" "${cache}/store-details.json"
+  for f in "${stage}"/*; do
+    [[ ${f} == */store-manifest.json* ]] || mv -f -- "${f}" "${cache}/"
+  done
+  if [[ -e ${stage}/store-manifest.json ]]; then
+    fetch "${base}/store.json.sig" "${cache}/store.json.sig" 2> /dev/null || true
+    mv -f -- "${stage}/store-manifest.json.sig" "${stage}/store-manifest.json" "${cache}/"
+  fi
+  # Next to a local bundle the store app reads detail documents from ${cache}/api/v1.
+  if [[ ${base} != https://* && -d ${base#file://}/api/v1 ]]; then
+    mkdir -p -- "${cache}/api"
+    ln -sfn -- "$(readlink -f -- "${base#file://}/api/v1")" "${cache}/api/v1"
+  fi
+  meta=$(jq -c --arg src "${base}" --argjson bundle "$([[ -e ${cache}/store-manifest.json ]] && echo true || echo false)" \
+    '{version, generatedAt, expires, dev, plugins, bundle: $bundle, source: $src, acceptedAt: (now | todate)}' "${tmp}/meta.json")
+  printf '%s\n' "${meta}" > "${tmp}/state.json" && mv -f -- "${tmp}/state.json" "${state_dir}/state.json"
+  version=$(jq -r .version <<< "${meta}")
+  if ((version > $(cat -- "${state_dir}/store-bundle-version" 2> /dev/null || echo 0))); then
+    printf '%s\n' "${version}" > "${tmp}/sbv" && mv -f -- "${tmp}/sbv" "${state_dir}/store-bundle-version"
+  fi
+  load
+  [[ ${snap_ok} == 1 ]] || die "snapshot rejected after install: ${snap_error}" 4
+  ok "$(jq -r '"snapshot verified · version \(.version) · generated \(.generatedAt) · \(.plugins) plugins"
+    + (if .bundle then " · client bundle" else "" end) + (if .dev then " · dev key" else "" end)' <<< "${meta}")"
+}
+
+# The per-plugin detail document (criteria, findings, tree). With a bundle its sha256 must be
+# the one the signed store-details.json lists, else it is ignored; a bare snapshot has no such
+# list, so its documents are used for display and the tree only (ADR-0033). Next to a local
+# snapshot, or fetched once into the cache for an https one (`check` only; `status` never fetches).
+detail() { # detail ID ALLOW_FETCH -> path or nothing
+  local id=$1 src api out want=""
+  [[ ${id} =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${id} != *..* ]] || return 0
+  src=$(source_url)
+  api=$(jq -r '.apiBase // "api/v1/"' "${index}")
+  [[ ${api} != /* && ${api} != *..* ]] || return 0
+  if [[ -s ${cache}/store-details.json ]]; then
+    want=$(jq -r --arg id "${id}" '.docs[$id] // empty' "${cache}/store-details.json")
+    [[ -n ${want} ]] || return 0
+  fi
+  case ${src} in
+    https://*)
+      out="${cache}/api/${id}.json"
+      if [[ ! -s ${out} || (-z ${want} && ${out} -ot ${cache}/store.json) || (-n ${want} && $(sha256sum < "${out}") != "${want}  -") ]] \
+        && [[ $2 == 1 && ${OPC_OFFLINE:-0} != 1 ]]; then
+        mkdir -p -- "${cache}/api"
+        if curl --proto '=https' -fsSL --max-time 20 -o "${out}.part" -- "${src}/${api}plugins/${id}.json"; then
+          mv -f -- "${out}.part" "${out}"
+        else
+          rm -f -- "${out}.part"
+        fi
+      fi
+      ;;
+    *) out="${src#file://}/${api}plugins/${id}.json" ;;
+  esac
+  [[ -s ${out} ]] || return 0
+  [[ -z ${want} || $(sha256sum < "${out}") == "${want}  -" ]] || return 0
+  printf '%s' "${out}"
+}
+
+# ---------------------------------------------------------------- local + upstream git
+
+gitq() { git -C "$1" -c core.fsmonitor=false "${@:2}" 2> /dev/null; }
+
+local_json() { # local_json DIR -> {dir,id,name,origin,head,tree,installed}
+  local d=$1 origin head tree
+  origin=$(gitq "${d}" remote get-url origin || true)
+  head=$(gitq "${d}" rev-parse --verify -q HEAD || true)
+  tree=$(gitq "${d}" rev-parse --verify -q 'HEAD^{tree}' || true)
+  jq -n -c --arg dir "${d}" --arg origin "${origin}" --arg head "${head}" --arg tree "${tree}" \
+    --slurpfile m <(cat -- "${d}/manifest.json" 2> /dev/null || echo '{}') '
+    def nz: if . == "" then null else . end;
+    ($m[0] // {}) as $m | {dir: $dir, id: (($m.id // "") | nz // ($dir | split("/") | last)),
+    name: $m.name, origin: ($origin | nz), head: ($head | nz), tree: ($tree | nz), installed: true}'
+}
+
+installed_for() { # installed_for ROW-JSON -> local json of the matching checkout, or {installed:false}
+  local d
+  for d in "${plugins_dir}"/*/; do
+    d=${d%/}
+    local_json "${d}"
+  done | J -c -s --argjson row "$1" 'include "opc";
+    (map(select(.origin != null and (.origin | repo_key) == ($row.repo | repo_key)))
+     | (map(select(.id == $row.id)) + .) | first) // {installed: false}'
+}
+
+upstream_json() { # upstream_json REPO -> {head, error}
+  local out
+  if [[ ${OPC_OFFLINE:-0} == 1 ]]; then
+    echo '{"head":null,"error":"offline"}'
+    return
+  fi
+  if out=$(timeout 20 git ls-remote -- "$1" HEAD 2> /dev/null) && [[ ${out} =~ ^([0-9a-f]{40}) ]]; then
+    jq -n -c --arg h "${BASH_REMATCH[1]}" '{head: $h, error: null}'
+  else
+    echo '{"head":null,"error":"git ls-remote failed"}'
+  fi
+}
+
+# model Q ROW-JSON PIN -> writes ${tmp}/model.json
+model() {
+  local q=$1 row=$2 pin=$3 loc='{"installed":false}' up='{"head":null,"error":null}' det=/dev/null snap
+  if [[ ${row} != null ]]; then
+    loc=$(installed_for "${row}")
+    up=$(upstream_json "$(jq -r .repo <<< "${row}")")
+    det=$(detail "$(jq -r .id <<< "${row}")" 1)
+    det=${det:-/dev/null}
+  fi
+  snap=$(jq -c '{version, generatedAt, catalog, dev, providers, now: now}' "${index}")
+  J -n --arg q "${q}" --argjson row "${row}" --argjson local "${loc}" --argjson upstream "${up}" \
+    --slurpfile detail "${det}" --argjson snap "${snap}" --argjson pin "${pin}" \
+    -f "${lib}/model.jq" > "${tmp}/model.json"
+}
+
+render() { J -r --arg mode "$1" --argjson color "${color}" --arg glyphs "${glyphs}" -f "${lib}/card.jq" "${tmp}/model.json"; }
+
+resolve() { J -c --arg q "$1" 'include "opc"; resolve($q)' "${index}"; }
+
+# ---------------------------------------------------------------- commands
+
+cmd_check() {
+  local q=${1:-} r n i rc=0
+  if [[ -z ${q} ]]; then
+    interactive || die "usage: omarchy-plugin-check <git-url|plugin-id>"
+    q=$(gum input --placeholder "https://github.com/owner/repo or a plugin id" --prompt "check › ") || exit 1
+    [[ -n ${q} ]] || exit 1
+    cmd_check "${q}" || rc=$?
+    if [[ ${rc} == 0 || ${rc} == 3 ]] && gum confirm "Add it through the gate (pinned to the reviewed commit)?"; then
+      cmd_add --pin --enable "${q}"
+      return
+    fi
+    return "${rc}"
+  fi
+  load
+  [[ ${snap_ok} == 1 ]] || die "no verified snapshot: ${snap_error}" 4
+  r=$(resolve "${q}")
+  n=$(jq '.rows | length' <<< "${r}")
+  if [[ ${n} == 0 ]]; then
+    model "${q}" null false
+    render card
+    return 3
+  fi
+  for ((i = 0; i < n; i++)); do
+    model "${q}" "$(jq -c ".rows[${i}]" <<< "${r}")" false
+    render card
+  done
+}
+
+confirm() {
+  local prompt=$1
+  [[ ${yes} == 1 ]] && return 0
+  interactive || die "needs confirmation (${prompt}); pass --yes to accept non-interactively" 1
+  if command -v gum > /dev/null; then gum confirm "${prompt}"; else
+    local a
+    read -r -p "${prompt} [y/N] " a
+    [[ ${a} == [yY]* ]]
+  fi
+}
+
+rollback() {
+  warn "rolling back: omarchy plugin remove $1"
+  "${omarchy}" plugin remove "$1" --yes > /dev/null 2>&1 || warn "could not remove $1; remove it by hand"
+}
+
+cmd_add() {
+  local enable=0 pin=0 force=0 q="" r n row=null url action reason before after new id head tree commit msg
+  yes=0
+  while (($# > 0)); do
+    case $1 in
+      --enable) enable=1 ;;
+      --pin) pin=1 ;;
+      --force) force=1 ;;
+      --yes | -y) yes=1 ;;
+      --add) ;;
+      -*) die "unknown --add option: $1" ;;
+      *)
+        [[ -z ${q} ]] || die "unexpected argument: $1"
+        q=$1
+        ;;
+    esac
+    shift
+  done
+  [[ -n ${q} ]] || die "usage: omarchy-plugin-check --add [--enable] [--pin] [--force] [--yes] <git-url|id>"
+
+  step 1 "verify snapshot signature"
+  load
+  if [[ ${snap_ok} != 1 ]]; then
+    [[ ${force} == 1 ]] || die "no verified snapshot (${snap_error}); run omarchy-plugin-check update, or --force to add it unreviewed" 4
+    [[ ${pin} == 0 ]] || die "--pin needs a verified snapshot (${snap_error})" 4
+    warn "no verified snapshot (${snap_error}); --force: treating it as unreviewed"
+    omarchy-git-url-check "${q}" || exit 1
+    confirm "Add an unreviewed plugin from ${q}?" || die "aborted"
+    url=${q}
+  else
+    r=$(resolve "${q}")
+    n=$(jq '.rows | length' <<< "${r}")
+    ((n <= 1)) || die "$(jq -r '"that repository lists \(.rows | length) plugins (\([.rows[].id] | join(", "))); pass the id"' <<< "${r}")"
+    [[ ${n} == 0 ]] || row=$(jq -c '.rows[0]' <<< "${r}")
+    if [[ ${row} == null ]]; then
+      jq -e --arg q "${q}" -n -L "${lib}" 'include "opc"; $q | repo_key' > /dev/null \
+        || [[ ${q} == file://* ]] || die "not a listed plugin id or a git URL: ${q}" 3
+      omarchy-git-url-check "${q}" || exit 1
+      url=${q}
+    else
+      url=$(jq -r '.repo' <<< "${row}")
+      [[ $(jq -r '.path // ""' <<< "${row}") == "" ]] || die "$(jq -r '.id' <<< "${row}") lives in a subdirectory of ${url}; omarchy plugin add cannot install it" 1
+    fi
+    model "${q}" "${row}" "$([[ ${pin} == 1 ]] && echo true || echo false)"
+    action=$(jq -r '.gate.action' "${tmp}/model.json")
+    reason=$(jq -r '.gate.reason' "${tmp}/model.json")
+    case ${action} in
+      refuse)
+        render refusal
+        exit "$(jq -r '.gate.code' "${tmp}/model.json")"
+        ;;
+      confirm)
+        render card
+        [[ ${row} != null || ${pin} == 0 ]] || warn "unlisted: nothing reviewed, so nothing to pin"
+        if [[ ${pin} == 1 && ${row} != null ]]; then
+          say "  --pin will check out $(jq -r '.reviewed.commit[0:7]' "${tmp}/model.json") (detached HEAD; \`omarchy plugin update\` won't move it)"
+        fi
+        confirm "Plugin is ${reason}. Continue?" || die "aborted"
+        ;;
+      proceed) render card ;;
+      *) die "internal: unknown gate action ${action}" ;;
+    esac
+  fi
+  [[ ! -e ${plugins_dir}/$(jq -r '.id // "-"' <<< "${row}") ]] || die "already installed; use omarchy plugin update / remove"
+
+  step 2 "clone ${url}"
+  mkdir -p -- "${plugins_dir}"
+  before=$(find "${plugins_dir}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+  local add=("${omarchy}" plugin add "${url}" --yes)
+  if [[ ${enable} == 1 && ${pin} == 0 ]]; then add+=(--enable); fi
+  "${add[@]}" || die "omarchy plugin add failed"
+  after=$(find "${plugins_dir}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+  new=$(comm -13 <(printf '%s\n' "${before}") <(printf '%s\n' "${after}"))
+  [[ -n ${new} && ${new} != *$'\n'* ]] || die "could not find the added plugin directory"
+  id=${new}
+
+  commit=$(jq -r '.reviewed.commit // empty' "${tmp}/model.json" 2> /dev/null || true)
+  tree=$(jq -r '.reviewed.tree // empty' "${tmp}/model.json" 2> /dev/null || true)
+  step 3 "pin reviewed commit ${commit:0:7}"
+  if [[ ${pin} == 1 && -n ${commit} ]]; then
+    gitq "${plugins_dir}/${id}" -c advice.detachedHead=false checkout --quiet "${commit}" \
+      || {
+        rollback "${id}"
+        die "the reviewed commit ${commit:0:7} is not in the upstream repository any more"
+      }
+    head=$(gitq "${plugins_dir}/${id}" rev-parse HEAD)
+    if [[ ${head} != "${commit}" ]] || [[ -n ${tree} && $(gitq "${plugins_dir}/${id}" rev-parse 'HEAD^{tree}') != "${tree}" ]]; then
+      rollback "${id}"
+      die "pinned checkout does not match the attested subject (commit ${commit:0:7}${tree:+, tree ${tree:0:7}})"
+    fi
+    msg="pinned ${commit:0:7}${tree:+ (tree =)}"
+  else
+    head=$(gitq "${plugins_dir}/${id}" rev-parse HEAD || true)
+    msg="at ${head:0:7}"
+    if [[ -n ${commit} && ${head} != "${commit}" ]]; then msg+=" (reviewed ${commit:0:7})"; fi
+  fi
+
+  step 4 "validate manifest"
+  "${omarchy}" plugin validate "${plugins_dir}/${id}" || {
+    rollback "${id}"
+    die "validation failed after pinning"
+  }
+  [[ ${row} == null || $(jq -r .id <<< "${row}") == "${id}" ]] \
+    || warn "manifest id ${id} differs from the marketplace id $(jq -r .id <<< "${row}")"
+
+  step 5 "enable in omarchy-shell"
+  if [[ ${enable} == 1 && ${pin} == 1 ]]; then
+    "${omarchy}" plugin enable "${id}" || warn "enable failed: omarchy plugin enable ${id}"
+  fi
+  if [[ ${enable} == 1 ]]; then msg+=" · enabled"; fi
+
+  step 6 "log to ~/.config/omarchy/CHANGES.md"
+  if [[ -f ${changes_md} ]]; then
+    log_change "${id}" "${url}" "${head:-${commit}}" "${pin}"
+    msg+=" · logged to ~/.config/omarchy/CHANGES.md"
+  fi
+  ok "cloned · ${msg}"
+}
+
+log_change() { # log_change ID URL SHA PINNED
+  local entry
+  entry=$(jq -r --arg id "$1" --arg url "$2" --arg sha "$3" --arg pinned "$4" '
+    "### Plugin: \(.name // $id) (`\($id)`)\n"
+    + "- **Source:** \($url) — commit `\($sha[0:7])`"
+    + (if $pinned == "1" then " (pinned to the reviewed commit; detached HEAD, `omarchy plugin update` will not move it)" else "" end) + "\n"
+    + "- **Installed:** `omarchy-plugin-check --add` (gated `omarchy plugin add`)\n"
+    + "- **Reviewed:** \(.state) per omarchy-plugin-check"
+    + (if .reviewed.commit then " (reviewed commit `\(.reviewed.commit[0:7])`; providers \(.providers | map("\(.id) \(.verdict)") | join(", ")))" else " (no review)" end)
+    + "; snapshot version \(.snapshot.version)" + (if .snapshot.dev then ", dev key" else "" end) + ".\n"
+    + "- **Undo:** `omarchy plugin remove \($id)`"' "${tmp}/model.json" 2> /dev/null \
+    || printf '### Plugin: %s\n- **Source:** %s — commit `%s`\n- **Undo:** `omarchy plugin remove %s`' "$1" "$2" "${3:0:7}" "$1")
+  jq -R -s -j --arg date "$(date +%F)" --arg entry "${entry}" -f "${lib}/changes.jq" "${changes_md}" > "${tmp}/changes.md"
+  cat -- "${tmp}/changes.md" > "${changes_md}"
+}
+
+cmd_status() {
+  local json=0 d details=() snap
+  if [[ ${1:-} == --json ]]; then json=1; fi
+  load
+  mkdir -p -- "${cache}"
+  for d in "${plugins_dir}"/*/; do
+    local_json "${d%/}"
+  done | jq -s -c . > "${tmp}/local.json"
+  [[ ${snap_ok} == 1 ]] || echo '{"ids":{},"repos":{},"providers":{}}' > "${tmp}/index.json"
+  if [[ ${snap_ok} == 1 ]]; then
+    while read -r d; do
+      d=$(detail "${d}" 0)
+      [[ -z ${d} ]] || details+=("${d}")
+    done < <(jq -r '.[].id' "${tmp}/local.json")
+  fi
+  snap=$(jq -n -c --argjson ok "$([[ ${snap_ok} == 1 ]] && echo true || echo false)" --arg err "${snap_error}" \
+    --arg url "$(source_url)" '{ok: $ok, error: (if $ok then null else $err end), url: $url, now: (now | floor)}')
+  cat /dev/null "${details[@]}" > "${tmp}/details.json"
+  J --slurpfile local "${tmp}/local.json" --slurpfile details "${tmp}/details.json" --argjson snap "${snap}" \
+    -f "${lib}/status.jq" "$([[ ${snap_ok} == 1 ]] && echo "${index}" || echo "${tmp}/index.json")" > "${tmp}/status.json"
+  mv -f -- "${tmp}/status.json" "${cache}/status.json"
+  if [[ ${json} == 1 ]]; then
+    cat -- "${cache}/status.json"
+  else
+    J -r --argjson color "${color}" --arg glyphs "${glyphs}" -f "${lib}/table.jq" "${cache}/status.json"
+  fi
+}
+
+menu_entries() {
+  local bin="omarchy-plugin-check"
+  if [[ ${self} =~ ^[A-Za-z0-9_./-]+$ ]]; then bin=${self}; fi
+  # icons: nerd font shield-check (U+F0CC8) and shield (U+F0499)
+  jq -n -c --arg bin "${bin}" --arg q "'" '{
+    "setup.plugin.check": {icon: ([986312] | implode), label: "Check Plugin",
+      description: "Commit-bound safety verdict before you add a plugin",
+      action: "omarchy-launch-floating-terminal-with-presentation \($q)\($bin) check\($q)"},
+    "setup.plugin.audit": {icon: ([984217] | implode), label: "Audit Plugins",
+      description: "Installed plugins against their reviewed commits",
+      action: "omarchy-launch-floating-terminal-with-presentation \($q)\($bin) status\($q)"}}'
+}
+
+edit_menu() { # edit_menu add|remove
+  local src=${menu_file}
+  [[ -f ${src} ]] || {
+    [[ $1 == add ]] || return 0
+    src=/dev/null
+  }
+  J -R -s -j --arg mode "$1" --argjson entries "$(menu_entries)" -f "${lib}/menu.jq" "${src}" > "${tmp}/menu.jsonc" \
+    || die "menu: left ${menu_file} untouched"
+  if [[ -f ${menu_file} ]] && cmp -s -- "${tmp}/menu.jsonc" "${menu_file}"; then
+    ok "menu: already $([[ $1 == add ]] && echo set up || echo clean)"
+    return
+  fi
+  mkdir -p -- "$(dirname -- "${menu_file}")"
+  if [[ -f ${menu_file} ]]; then
+    cp -p -- "${menu_file}" "${menu_file}.bak.$(date +%Y%m%d%H%M%S)"
+  fi
+  cat -- "${tmp}/menu.jsonc" > "${menu_file}"
+  ok "menu: $([[ $1 == add ]] && echo "Setup › Plugins › Check Plugin / Audit Plugins" || echo "entries removed") (${menu_file/#"${HOME}"/\~}; backup kept)"
+}
+
+cmd_setup() {
+  local link="${HOME}/.local/bin/omarchy-plugin-check"
+  if [[ ${1:-} == --uninstall ]]; then
+    if [[ -L ${link} && $(readlink -f -- "${link}") == "${self}" ]]; then
+      rm -f -- "${link}"
+      ok "removed ${link/#"${HOME}"/\~}"
+    fi
+    edit_menu remove
+    return
+  fi
+  mkdir -p -- "${HOME}/.local/bin"
+  if [[ -L ${link} && $(readlink -f -- "${link}") == "${self}" ]]; then
+    ok "CLI: ${link/#"${HOME}"/\~} already links here"
+  else
+    [[ ! -e ${link} && ! -L ${link} ]] || mv -- "${link}" "${link}.bak.$(date +%Y%m%d%H%M%S)"
+    ln -s -- "${self}" "${link}"
+    ok "CLI: ${link/#"${HOME}"/\~} -> ${self/#"${HOME}"/\~}"
+  fi
+  edit_menu add
+  if command -v omarchy-plugin-store > /dev/null; then
+    say "  hint: a store keybind, in ~/.config/hypr/bindings.lua (pick a free key):"
+    say "        o.bind(\"SUPER + ALT + P\", \"Plugin store\", \"omarchy-plugin-store\")"
+  fi
+  [[ -s ${cache}/store.json ]] || say "  next: omarchy-plugin-check update"
+}
+
+main() {
+  case ${1:-} in
+    "" | -h | --help | help) usage ;;
+    --version) say "omarchy-plugin-check ${VERSION}" ;;
+    --add) cmd_add "$@" ;;
+    status) cmd_status "${@:2}" ;;
+    update) cmd_update "${@:2}" ;;
+    setup) cmd_setup "${@:2}" ;;
+    check) cmd_check "${@:2}" ;;
+    -*)
+      # flags before --add (e.g. --pin --add URL)
+      if [[ " $* " == *" --add "* ]]; then cmd_add "$@"; else die "unknown option: $1 (see --help)"; fi
+      ;;
+    *) cmd_check "$1" ;;
+  esac
+}
+
+main "$@"

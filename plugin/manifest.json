@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.prometheusroot.plugin-check",
+  "name": "Plugin Check",
+  "version": "0.1.0",
+  "author": "PrometheusRoot",
+  "description": "Commit-bound safety verdicts for your installed Omarchy plugins: a bar shield tinted by the worst state and a panel listing each plugin's reviewed commit, from one signed snapshot checked locally.",
+  "homepage": "https://github.com/PrometheusRoot/omarchy-plugin-check",
+  "kinds": ["panel", "bar-widget"],
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Plugin Check",
+    "description": "Shield tinted by the worst state of your installed plugins; click for the list.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
