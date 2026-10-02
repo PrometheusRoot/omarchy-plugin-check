@@ -27,7 +27,10 @@ export function steps(p) {
 // snapshot value can never turn into a checker flag (e.g. "--force").
 export function command(p) {
   if (!p || !REPO_RE.test(String(p.repo || ""))) return null;
-  return [CHECKER, "--add", "--pin", String(p.repo)];
+  // why: the store has already shown its own confirm dialog and has no terminal for the
+  // checker's prompt, so it passes --yes; --enable matches the "enable" step above (ADR-0033).
+  // Blocked plugins are still refused by the checker: --yes never overrides a refusal.
+  return [CHECKER, "--add", "--pin", "--yes", "--enable", String(p.repo)];
 }
 
 export function removeCommand(p) {

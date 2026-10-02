@@ -30,7 +30,7 @@ test("already installed is a no-op; non-GitHub repos are not installable", () =>
 });
 
 test("command is argv with a validated GitHub URL (no flag injection)", () => {
-  assert.deepEqual(I.command(p("safe")), ["omarchy-plugin-check", "--add", "--pin", "https://github.com/o/p"]);
+  assert.deepEqual(I.command(p("safe")), ["omarchy-plugin-check", "--add", "--pin", "--yes", "--enable", "https://github.com/o/p"]);
   assert.deepEqual(I.command(p("safe", { repo: "https://github.com/o/p.git" })).slice(-1), ["https://github.com/o/p.git"]);
   for (const bad of ["--force", "https://github.com/o/p --force", "http://github.com/o/p", "https://evil.example/o/p", "https://github.com/o/p/../x", "https://github.com/o"])
     assert.equal(I.command(p("safe", { repo: bad })), null, bad);
