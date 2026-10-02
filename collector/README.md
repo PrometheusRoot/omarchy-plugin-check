@@ -7,7 +7,7 @@ the aggregator (`stats.json`, `ranking.json` in; `api/v1/index.json` out).
 
 ```
 opc-collect sync                                   # catalog.json + registry.json → cache (conditional GET)
-opc-collect github [--batch 25] [--max-repos N] [--seed-catalog old-catalog.json]
+opc-collect github [--batch 25] [--max-repos N] [--seed-catalog old-catalog.json] [--repo owner/name]...
 opc-collect stats --out stats.json                 # GitHub stats + api.omarchyplugins.com engagement
 opc-collect rank --stats stats.json --api-index api/v1/index.json --out ranking.json
 ```
@@ -15,6 +15,11 @@ opc-collect rank --stats stats.json --api-index api/v1/index.json --out ranking.
 Cache: `~/.cache/omarchy-plugin-check/collector/` (`marketplace/`, `github/<owner>__<name>.json`
 with star history, `engagement.json`, `github-report.json`). A run skips repositories fetched within
 `--ttl-hours` (20), so an interrupted or rate-limited run resumes; exit code 3 = stopped early.
+`--repo` refreshes just those repositories now, whatever their age.
+
+Weekly activity (`weeks`, the store's commit sparkline; shown, not ranked): commits per week for
+52 weeks from the same last-100-commits page the contributor count uses; when that page is full,
+weeks older than its oldest commit are `null` (unknown), not 0.
 
 GitHub access: read-only GraphQL with the token of the `gh` CLI (`gh auth token`), read at run time,
 kept in memory, sent only to api.github.com. Batches of 25 repositories (~1 point each), halved on

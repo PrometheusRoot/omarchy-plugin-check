@@ -152,6 +152,18 @@ def test_repo_stats_fields():
     assert s["respH"] == 6.0  # median of 10h and 2h
     assert s["images"] == [f"https://raw.githubusercontent.com/o/r/{SHA}/shot.png"]
     assert s["dirImages"] == {"plugins/a": [f"https://raw.githubusercontent.com/o/r/{SHA}/plugins/a/p.png"]}
+    assert len(s["weeks"]) == stats.WEEKS
+    assert sum(w or 0 for w in s["weeks"]) == 4  # every recent commit is within 52 weeks
+
+
+def test_weekly_commits_buckets_and_truncation():
+    d = lambda days: NOW - dt.timedelta(days=days)  # noqa: E731  # why: tiny local helper
+    w = stats.weekly_commits([d(0), d(6), d(7), d(400), d(-3)], NOW, truncated=False)
+    assert (w[-1], w[-2], w[0], sum(x or 0 for x in w)) == (2, 1, 0, 3)
+    t = stats.weekly_commits([d(1), d(15)], NOW, truncated=True)
+    assert t[-3:] == [1, 0, 1]
+    assert t[:-3] == [None] * (stats.WEEKS - 3)
+    assert stats.weekly_commits([], NOW, truncated=True) == [0] * stats.WEEKS
 
 
 def test_repo_stats_empty_repo_is_unknown_not_zero():
@@ -164,6 +176,7 @@ def test_repo_stats_empty_repo_is_unknown_not_zero():
     assert s["rel180"] is None
     assert s["respH"] is None
     assert s["images"] == []
+    assert s["weeks"] is None
     assert stats.parse_time("2026-10-01T00:00:00") == dt.datetime(2026, 10, 1, tzinfo=dt.UTC)
     assert stats.parse_time(None) is None
 

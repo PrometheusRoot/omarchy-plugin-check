@@ -22,6 +22,9 @@ RELEASE_WINDOW: Final = dt.timedelta(days=180)
 VELOCITY_WINDOW_DAYS: Final = 30
 HISTORY_DAYS: Final = 120
 README_ALIASES: Final = ("readme0", "readme1", "readme2", "readme3", "readme4")
+WEEKS: Final = 52
+RECENT_COMMITS: Final = 100
+"""history(first: 100) in query._REPO_FIELDS: a full page means older weeks are unknown, not zero."""
 
 
 def parse_time(value: object) -> dt.datetime | None:
@@ -68,6 +71,24 @@ def first_response_hours(issues: Sequence[Mapping[str, Any]]) -> float | None:
     return round(statistics.median(hours), 1) if hours else None
 
 
+def weekly_commits(dates: Sequence[dt.datetime], now: dt.datetime, *, truncated: bool) -> list[int | None]:
+    """Commits per week for the last WEEKS weeks, oldest first, last = the 7 days up to `now`.
+
+    `truncated` (the commit page was full): weeks entirely older than the oldest commit read are
+    None (unknown), not 0. Commits in the future or older than WEEKS weeks are ignored.
+    """
+    counts: list[int | None] = [0] * WEEKS
+    for t in dates:
+        back = (now - t).days // 7
+        if 0 <= back < WEEKS:
+            counts[WEEKS - 1 - back] = (counts[WEEKS - 1 - back] or 0) + 1
+    if truncated and dates:
+        oldest = (now - min(dates)).days // 7
+        for back in range(oldest + 1, WEEKS):
+            counts[WEEKS - 1 - back] = None
+    return counts
+
+
 def _readme_text(node: Mapping[str, Any]) -> str | None:
     for alias in README_ALIASES:
         t = text(obj(node.get(alias)).get("text"))
@@ -112,6 +133,13 @@ def repo_stats(
         "respH": first_response_hours(objs(obj(node.get("recentIssues")).get("nodes"))),
         "images": image_urls(readme, owner, name, ref) if readme else [],
         "dirImages": dir_images,
+        "weeks": weekly_commits(
+            [t for t in (parse_time(c.get("committedDate")) for c in commits) if t],
+            now,
+            truncated=len(commits) >= RECENT_COMMITS,
+        )
+        if target
+        else None,
     }
 
 

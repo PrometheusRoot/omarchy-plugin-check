@@ -368,6 +368,8 @@ def test_cli_flow(tmp_path, monkeypatch, capsys):
     old.write_text(json.dumps(cat))
     assert cli.main(["--cache", str(cache), "github", "--pause", "0", "--seed-catalog", str(old)]) == 0
     assert json.loads(capsys.readouterr().out)["fetched"] == 2
+    assert cli.main(["--cache", str(cache), "github", "--pause", "0", "--repo", "o/r1"]) == 0
+    assert json.loads(capsys.readouterr().out)["fetched"] == 1  # fresh, but asked for explicitly
     assert cli.main(["--cache", str(cache), "stats", "--out", str(tmp_path / "stats.json")]) == 0
     st = json.loads((tmp_path / "stats.json").read_text())
     assert st["repos"]["o/r0"]["stars"] == 3

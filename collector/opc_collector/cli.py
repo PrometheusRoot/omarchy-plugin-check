@@ -49,10 +49,12 @@ def cmd_github(args: argparse.Namespace) -> int:
     cache = Path(args.cache)
     market = _market(cache)
     refs = inputs.repo_refs(market)
+    if args.repo:  # refresh just these repositories now, whatever their age
+        refs = [r for r in refs if r.key in set(args.repo)]
     catalogs = [_json(cache / "marketplace" / "catalog.json"), *(_json(Path(p)) for p in args.seed_catalog)]
     opts = github.Options(
         batch_size=args.batch,
-        ttl=dt.timedelta(hours=args.ttl_hours),
+        ttl=dt.timedelta(hours=0 if args.repo else args.ttl_hours),
         max_wait=args.max_wait,
         pause=args.pause,
         max_repos=args.max_repos,
@@ -127,6 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--max-wait", type=float, default=900, help="longest rate-limit wait before stopping")
     g.add_argument("--pause", type=float, default=1.0, help="seconds between queries")
     g.add_argument("--max-repos", type=int)
+    g.add_argument("--repo", action="append", default=[], help="owner/name: refresh now, ignore the TTL")
     g.add_argument("--seed-catalog", action="append", default=[], help="older catalog.json for star history")
     g.set_defaults(func=cmd_github)
     s = sub.add_parser("stats", help="write stats.json (GitHub stats + engagement)")
