@@ -1,0 +1,95 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opc-collector"
+version = "0.1.0"
+description = "omarchy-plugin-check collector: marketplace sync, GitHub activity (GraphQL), engagement, ranking (public)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["opc-spec"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-cov==7.1.0", "hypothesis==6.168.3"]
+
+[project.scripts]
+opc-collect = "opc_collector.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["opc_collector"]
+
+[tool.ruff]
+extend = "../standards/ruff.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D", "ANN", "PLR", "FBT"]
+# why: printing is the product of the CLI entry point
+"opc_collector/cli.py" = ["T201"]
+
+[tool.basedpyright]
+extends = "../standards/basedpyright.json"
+include = ["opc_collector", "tests"]
+venvPath = ".."
+venv = ".venv"
+executionEnvironments = [
+  { root = "tests", reportUnknownArgumentType = false, reportUnknownVariableType = false, reportUnknownMemberType = false, reportUnknownParameterType = false, reportUnknownLambdaType = false, reportMissingParameterType = false, reportMissingTypeArgument = false, reportPrivateUsage = false },
+  { root = "opc_collector" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --cov=opc_collector --cov-branch --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+branch = true
+source = ["opc_collector"]
+
+[tool.coverage.report]
+fail_under = 90  # new package: starts high, only ratchets up (docs/ENGINEERING.md#ratchets)
+
+[tool.deptry]
+known_first_party = ["opc_collector"]
+
+[tool.importlinter]
+root_package = "opc_collector"
+include_external_packages = true
+
+# ADR-0026. cli is the composition root (the only module that builds the network adapters).
+[[tool.importlinter.contracts]]
+name = "collector layers"
+type = "layers"
+layers = [
+  "opc_collector.cli",
+  "opc_collector.github | opc_collector.sync | opc_collector.net",
+  "opc_collector.inputs",
+  "opc_collector.rank | opc_collector.query | opc_collector.stats",
+  "opc_collector.readme | opc_collector.ports",
+]
+
+[[tool.importlinter.contracts]]
+name = "public packages never import the private scanner or orchestrator"
+type = "forbidden"
+source_modules = ["opc_collector"]
+forbidden_modules = ["opsec", "opsec_orch", "opc_aggregator"]
+
+[[tool.importlinter.contracts]]
+name = "only net talks to the network or runs processes"
+type = "forbidden"
+source_modules = ["opc_collector.cli", "opc_collector.github", "opc_collector.sync", "opc_collector.inputs", "opc_collector.rank", "opc_collector.query", "opc_collector.stats", "opc_collector.readme", "opc_collector.ports"]
+forbidden_modules = ["http", "socket", "subprocess"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "urllib (requests) only in net; readme may parse URLs"
+type = "forbidden"
+source_modules = ["opc_collector.cli", "opc_collector.github", "opc_collector.sync", "opc_collector.inputs", "opc_collector.rank", "opc_collector.query", "opc_collector.stats", "opc_collector.ports"]
+forbidden_modules = ["urllib"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "ranking core is pure"
+type = "forbidden"
+source_modules = ["opc_collector.rank", "opc_collector.query", "opc_collector.stats", "opc_collector.readme", "opc_collector.inputs"]
+forbidden_modules = ["os", "shutil", "time", "pathlib", "opc_collector.net", "opc_collector.github", "opc_collector.sync"]

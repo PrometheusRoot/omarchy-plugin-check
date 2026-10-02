@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/statement.schema.json",
+  "title": "in-toto Statement v1 carrying a security-review predicate",
+  "description": "The DSSE payload (payloadType application/vnd.in-toto+json) a provider signs. One subject: the plugin repository at one commit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_type", "subject", "predicateType", "predicate"],
+  "properties": {
+    "_type": { "const": "https://in-toto.io/Statement/v1" },
+    "subject": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "digest"],
+        "properties": {
+          "name": { "$ref": "common.schema.json#/$defs/subjectName" },
+          "digest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["gitCommit"],
+            "properties": {
+              "gitCommit": { "$ref": "common.schema.json#/$defs/sha1" },
+              "gitTree": { "$ref": "common.schema.json#/$defs/sha1" }
+            }
+          }
+        }
+      }
+    },
+    "predicateType": {
+      "type": "string",
+      "pattern": "^https://[^\\s]+/attestation/security-review/v1$",
+      "description": "Default https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1; a deployment may configure its own base URL, consumers compare exactly."
+    },
+    "predicate": { "$ref": "predicate.schema.json" }
+  }
+}

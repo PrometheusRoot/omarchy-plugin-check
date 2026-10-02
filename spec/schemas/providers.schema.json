@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/providers.schema.json",
+  "title": "Provider registry v1 (providers.json)",
+  "description": "Who may publish verdicts and how they are trusted. Signed with the project key (namespace omarchy-plugin-check-providers), versioned and expiring like a feed index.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "version", "generatedAt", "expires", "predicateType", "providers"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "expires": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "predicateType": { "type": "string", "pattern": "^https://[^\\s]+/attestation/security-review/v1$" },
+    "dev": { "type": "boolean", "description": "true = development registry: providers with signing 'none' are accepted (rows marked unsigned-dev). Never true in a published registry." },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "kind", "tier", "feedUrl", "signing", "sigstore", "validFrom", "validUntil", "excludedWindows", "criteriaSupported", "conflictsOfInterest", "contact"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/providerId" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "kind": { "enum": ["feed", "marketplace-baseline"], "description": "feed = protocol v1 feed; marketplace-baseline = the marketplace registry.json automatedSecurityBaseline (always unsigned)." },
+          "tier": { "$ref": "common.schema.json#/$defs/tier" },
+          "feedUrl": { "type": "string", "minLength": 1, "maxLength": 512, "description": "https:// URL of the feed root (feed/v1/index.json below it) or of registry.json; a relative path is allowed only in dev registries." },
+          "signing": { "enum": ["sigstore", "none"] },
+          "sigstore": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["oidcIssuer", "certificateIdentity", "repository"],
+                "properties": {
+                  "oidcIssuer": { "type": "string", "format": "uri", "maxLength": 256 },
+                  "certificateIdentity": { "type": "string", "minLength": 1, "maxLength": 512, "description": "Exact certificate SAN, e.g. https://github.com/<o>/<r>/.github/workflows/publish.yml@refs/heads/main" },
+                  "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" }
+                }
+              }
+            ]
+          },
+          "validFrom": { "$ref": "common.schema.json#/$defs/dateTime" },
+          "validUntil": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] },
+          "excludedWindows": {
+            "type": "array",
+            "description": "Signing times inside these windows are rejected (e.g. a key or workflow compromise).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "until", "reason"],
+              "properties": {
+                "from": { "$ref": "common.schema.json#/$defs/dateTime" },
+                "until": { "$ref": "common.schema.json#/$defs/dateTime" },
+                "reason": { "type": "string", "maxLength": 300 }
+              }
+            }
+          },
+          "criteriaSupported": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/criterion" } },
+          "conflictsOfInterest": { "type": "array", "uniqueItems": true, "items": { "type": "string", "maxLength": 128 }, "description": "Plugin ids or GitHub owners this provider must not review; such rows are ignored." },
+          "contact": { "type": "string", "maxLength": 256 },
+          "homepage": { "type": "string", "format": "uri", "maxLength": 256 }
+        }
+      }
+    }
+  }
+}

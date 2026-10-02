@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "generatedAt": "2026-10-01T00:00:00Z",
+  "expires": "2026-12-31T00:00:00Z",
+  "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
+  "providers": [
+    {
+      "id": "example",
+      "name": "Example provider",
+      "kind": "feed",
+      "tier": "community",
+      "feedUrl": "https://example.github.io/opc-feed/",
+      "signing": "sigstore",
+      "sigstore": {
+        "oidcIssuer": "https://token.actions.githubusercontent.com",
+        "certificateIdentity": "https://github.com/example/opc-feed/.github/workflows/publish.yml@refs/heads/main",
+        "repository": "example/opc-feed"
+      },
+      "validFrom": "2026-10-01T00:00:00Z",
+      "validUntil": null,
+      "excludedWindows": [],
+      "criteriaSupported": ["safe-to-run", "no-network", "no-exec"],
+      "conflictsOfInterest": ["example"],
+      "contact": "https://github.com/example/opc-feed/issues"
+    },
+    {
+      "id": "marketplace",
+      "name": "Omarchy marketplace baseline",
+      "kind": "marketplace-baseline",
+      "tier": "unsigned",
+      "feedUrl": "https://raw.githubusercontent.com/omacom/omarchy-plugin-marketplace/main/registry.json",
+      "signing": "none",
+      "sigstore": null,
+      "validFrom": "2026-01-01T00:00:00Z",
+      "validUntil": null,
+      "excludedWindows": [],
+      "criteriaSupported": [],
+      "conflictsOfInterest": [],
+      "contact": "https://github.com/omacom/omarchy-plugin-marketplace"
+    }
+  ]
+}

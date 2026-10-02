@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/predicate.schema.json",
+  "title": "security-review predicate v1",
+  "description": "What one provider concluded about one plugin at one commit. Coarse by design: categories and locations, never internal rule ids or weights (ADR-0007, ADR-0011).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider", "plugin", "timeReviewed", "verdict", "criteria", "scope", "findings"],
+  "properties": {
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scannerVersion", "method"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/providerId" },
+        "scannerVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "method": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["static", "ai", "manual", "dynamic"] } }
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/pluginId", "description": "Marketplace catalog id; the subject names the repository, this names the plugin inside it." },
+        "catalogGeneratedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] },
+        "target": { "enum": ["marketplace-verified", "marketplace-listing", "upstream-observed", "other"], "description": "Which marketplace commit field the reviewed commit came from." }
+      }
+    },
+    "timeReviewed": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "verdict": { "$ref": "common.schema.json#/$defs/verdict" },
+    "summary": { "type": "string", "maxLength": 200 },
+    "criteria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checked", "failed"],
+      "properties": {
+        "checked": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/criterion" } },
+        "failed": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/criterion" } },
+        "notChecked": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/criterion" } }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "enum": ["full", "delta"] },
+        "path": { "$ref": "common.schema.json#/$defs/relPath", "description": "Plugin directory reviewed ('' = repository root)." },
+        "baseCommit": { "$ref": "common.schema.json#/$defs/sha1", "description": "delta only: the previously reviewed commit." }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "severity", "confidence", "message", "locations"],
+        "properties": {
+          "category": { "$ref": "common.schema.json#/$defs/category" },
+          "severity": { "$ref": "common.schema.json#/$defs/severity" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "blocking": { "type": "boolean", "description": "This finding alone justifies `blocked`. A `blocked` verdict needs at least one blocking finding with a file:line location, else aggregators downgrade it to `risky`." },
+          "locations": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path"],
+              "properties": {
+                "path": { "$ref": "common.schema.json#/$defs/relPath" },
+                "startLine": { "type": "integer", "minimum": 1 },
+                "endLine": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score"],
+      "description": "Optional provider code-quality signal (0-100); a ranking input, never a safety input.",
+      "properties": { "score": { "type": "integer", "minimum": 0, "maximum": 100 } }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri"],
+      "properties": {
+        "uri": { "type": "string", "format": "uri", "maxLength": 512 },
+        "digest": { "type": "object", "additionalProperties": false, "required": ["sha256"], "properties": { "sha256": { "$ref": "common.schema.json#/$defs/sha256" } } }
+      }
+    },
+    "report": {
+      "$ref": "https://prometheusroot.github.io/omarchy-plugin-security/schemas/v1/report.schema.json",
+      "description": "Optional extension: the provider's full report (schemas/report.schema.json). Providers must make rule identifiers opaque before publishing it."
+    }
+  }
+}

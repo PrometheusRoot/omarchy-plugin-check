@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/api-plugin.schema.json",
+  "title": "Aggregated plugin view (api/v1/plugins/<id>.json)",
+  "description": "Every provider's latest row for one plugin plus the combined verdict (ADR-0009). Per-provider rows are always present, also when the combined verdict ignores or caps them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "repo", "listingState", "marketplaceUrl", "combined", "providers"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "common.schema.json#/$defs/pluginId" },
+    "name": { "type": "string", "maxLength": 200 },
+    "repo": { "$ref": "common.schema.json#/$defs/repoUrl" },
+    "listingState": { "enum": ["listed", "retired", "builtin"] },
+    "marketplaceUrl": { "type": "string", "format": "uri" },
+    "combined": { "$ref": "#/$defs/combined" },
+    "providers": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+  },
+  "$defs": {
+    "combined": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "basis", "contested", "commits", "reasons"],
+      "properties": {
+        "verdict": { "$ref": "common.schema.json#/$defs/verdict" },
+        "basis": { "enum": ["trusted", "untrusted", "none"], "description": "trusted = at least one core/verified row decided it; untrusted = only capped rows (community, unsigned): `safe` is then reported as `unknown`." },
+        "contested": { "type": "boolean", "description": "Trusted rows disagree by two or more levels, or a trusted `safe` meets a capped `risky`/`blocked`." },
+        "commits": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/sha1" }, "description": "Distinct reviewed commits behind the combined verdict (more than one = rows review different commits)." },
+        "reasons": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 200 } }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "tier", "verification", "commit", "verdict", "effectiveVerdict", "adjustments", "timeReviewed", "counted"],
+      "properties": {
+        "provider": { "$ref": "common.schema.json#/$defs/providerId" },
+        "tier": { "$ref": "common.schema.json#/$defs/tier" },
+        "verification": { "$ref": "common.schema.json#/$defs/verification" },
+        "signer": { "type": ["string", "null"], "maxLength": 512, "description": "Verified certificate identity (sigstore only)." },
+        "signedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }], "description": "Transparency-log integrated time (sigstore only)." },
+        "commit": { "oneOf": [{ "$ref": "common.schema.json#/$defs/sha1" }, { "type": "null" }] },
+        "tree": { "oneOf": [{ "$ref": "common.schema.json#/$defs/sha1" }, { "type": "null" }] },
+        "verdict": { "$ref": "common.schema.json#/$defs/verdict" },
+        "effectiveVerdict": { "$ref": "common.schema.json#/$defs/verdict" },
+        "adjustments": { "type": "array", "uniqueItems": true, "items": { "enum": ["capped-at-caution", "blocked-without-evidence"] } },
+        "counted": { "type": "boolean", "description": "false = shown but not part of the combined verdict (unknown verdict)." },
+        "timeReviewed": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] },
+        "summary": { "type": "string", "maxLength": 200 },
+        "criteria": { "type": "object" },
+        "findings": { "type": "array", "items": { "type": "object" } },
+        "detail": { "type": "object", "description": "Source-specific extras (marketplace: baseline findings + capabilities)." },
+        "statement": { "type": ["string", "null"], "description": "API-relative path of the verified statement (immutable)." }
+      }
+    }
+  }
+}

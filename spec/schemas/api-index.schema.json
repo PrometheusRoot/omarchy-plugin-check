@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/api-index.schema.json",
+  "title": "Aggregated index (api/v1/index.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "plugins"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "repo", "verdict", "basis", "contested", "providers", "path"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/pluginId" },
+          "repo": { "$ref": "common.schema.json#/$defs/repoUrl" },
+          "verdict": { "$ref": "common.schema.json#/$defs/verdict" },
+          "basis": { "enum": ["trusted", "untrusted", "none"] },
+          "contested": { "type": "boolean" },
+          "quality": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+          "providers": { "type": "object", "propertyNames": { "$ref": "common.schema.json#/$defs/providerId" }, "additionalProperties": { "$ref": "common.schema.json#/$defs/verdict" } },
+          "path": { "type": "string", "pattern": "^plugins/[A-Za-z0-9][A-Za-z0-9._-]*\\.json$" }
+        }
+      }
+    }
+  }
+}

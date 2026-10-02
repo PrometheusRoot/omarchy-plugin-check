@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/common.schema.json",
+  "title": "Provider protocol v1: shared definitions",
+  "$defs": {
+    "sha1": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "pluginId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128 },
+    "providerId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+    "repoUrl": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "subjectName": { "type": "string", "pattern": "^git\\+https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "verdict": { "enum": ["safe", "caution", "risky", "blocked", "unknown"] },
+    "tier": { "enum": ["core", "verified", "community", "unsigned"] },
+    "criterion": {
+      "enum": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-privilege", "no-obfuscation", "no-secrets", "reviewed-by-human"]
+    },
+    "category": {
+      "enum": ["exec", "network", "persistence", "privilege", "obfuscation", "injection", "secret", "filesystem", "package", "supply-chain", "quality", "performance", "external-code", "other"]
+    },
+    "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "relPath": { "type": "string", "maxLength": 512, "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).*$" },
+    "verification": {
+      "enum": ["sigstore", "unsigned-dev", "unsigned"],
+      "description": "sigstore = bundle verified against the registry identity; unsigned-dev = provider allowed unsigned in a dev registry; unsigned = a source that is never signed (marketplace)."
+    }
+  }
+}

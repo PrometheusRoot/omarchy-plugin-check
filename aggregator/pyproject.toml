@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opc-aggregator"
+version = "0.1.0"
+description = "omarchy-plugin-check aggregator: verify provider feeds (Sigstore), merge verdicts, publish api/v1 + store.json (public)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+# Runtime pins (Renovate moves them). opc-spec is the sibling public package (spec/).
+dependencies = ["opc-spec", "sigstore==4.5.0"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-cov==7.1.0", "hypothesis==6.168.3"]
+
+[project.scripts]
+opc-aggregate = "opc_aggregator.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["opc_aggregator"]
+
+[tool.ruff]
+extend = "../standards/ruff.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D", "ANN", "PLR", "FBT"]
+# why: printing is the product of the CLI entry point
+"opc_aggregator/cli.py" = ["T201"]
+
+[tool.basedpyright]
+extends = "../standards/basedpyright.json"
+include = ["opc_aggregator", "tests"]
+venvPath = ".."
+venv = ".venv"
+executionEnvironments = [
+  { root = "tests", reportUnknownArgumentType = false, reportUnknownVariableType = false, reportUnknownMemberType = false, reportUnknownParameterType = false, reportUnknownLambdaType = false, reportMissingParameterType = false, reportMissingTypeArgument = false, reportPrivateUsage = false },
+  { root = "opc_aggregator" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --cov=opc_aggregator --cov-branch --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+branch = true
+source = ["opc_aggregator"]
+
+[tool.coverage.report]
+fail_under = 90  # new package: starts high, only ratchets up (docs/ENGINEERING.md#ratchets)
+
+[tool.deptry]
+known_first_party = ["opc_aggregator"]
+
+[tool.importlinter]
+root_package = "opc_aggregator"
+include_external_packages = true
+
+# ADR-0026. cli is the composition root (the only module that builds real adapters).
+[[tool.importlinter.contracts]]
+name = "aggregator layers"
+type = "layers"
+layers = [
+  "opc_aggregator.cli",
+  "opc_aggregator.publish",
+  "opc_aggregator.build",
+  "opc_aggregator.fetch | opc_aggregator.sigstore_verifier | opc_aggregator.unsigned | opc_aggregator.sshsig | opc_aggregator.state",
+  "opc_aggregator.api | opc_aggregator.snapshot | opc_aggregator.statements",
+  "opc_aggregator.admit | opc_aggregator.merge",
+  "opc_aggregator.marketplace",
+  "opc_aggregator.ports",
+  "opc_aggregator.model",
+]
+
+[[tool.importlinter.contracts]]
+name = "public packages never import the private scanner or orchestrator"
+type = "forbidden"
+source_modules = ["opc_aggregator"]
+forbidden_modules = ["opsec", "opsec_orch", "opc_collector"]
+
+[[tool.importlinter.contracts]]
+name = "sigstore only behind the Verifier port"
+type = "forbidden"
+source_modules = ["opc_aggregator.build", "opc_aggregator.publish", "opc_aggregator.api", "opc_aggregator.snapshot", "opc_aggregator.statements", "opc_aggregator.admit", "opc_aggregator.merge", "opc_aggregator.marketplace", "opc_aggregator.model", "opc_aggregator.ports", "opc_aggregator.unsigned", "opc_aggregator.fetch", "opc_aggregator.state", "opc_aggregator.sshsig"]
+forbidden_modules = ["sigstore"]
+
+[[tool.importlinter.contracts]]
+name = "aggregator core is pure"
+type = "forbidden"
+source_modules = ["opc_aggregator.admit", "opc_aggregator.merge", "opc_aggregator.marketplace", "opc_aggregator.model", "opc_aggregator.ports", "opc_aggregator.api", "opc_aggregator.snapshot", "opc_aggregator.statements"]
+forbidden_modules = ["subprocess", "socket", "urllib", "http", "shutil", "sigstore", "opc_aggregator.fetch", "opc_aggregator.sshsig"]

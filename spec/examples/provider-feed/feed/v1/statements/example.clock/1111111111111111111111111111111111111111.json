@@ -1,0 +1,37 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "git+https://github.com/example/clock",
+      "digest": {
+        "gitCommit": "1111111111111111111111111111111111111111",
+        "gitTree": "2222222222222222222222222222222222222222"
+      }
+    }
+  ],
+  "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
+  "predicate": {
+    "provider": { "id": "example", "scannerVersion": "0.1.0", "method": ["static"] },
+    "plugin": { "id": "example.clock", "catalogGeneratedAt": "2026-10-01T00:00:00Z", "target": "marketplace-listing" },
+    "timeReviewed": "2026-10-01T12:00:00Z",
+    "verdict": "caution",
+    "summary": "caution: runs one external command (date) every second",
+    "criteria": {
+      "checked": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-privilege", "no-obfuscation", "no-secrets"],
+      "failed": ["no-exec"],
+      "notChecked": ["reviewed-by-human"]
+    },
+    "scope": { "kind": "full", "path": "" },
+    "findings": [
+      {
+        "category": "exec",
+        "severity": "low",
+        "confidence": 0.9,
+        "message": "starts an external process from QML",
+        "locations": [{ "path": "BarWidget.qml", "startLine": 14, "endLine": 18 }]
+      }
+    ],
+    "quality": { "score": 72 },
+    "policy": { "uri": "https://prometheusroot.github.io/omarchy-plugin-check/policy/v1" }
+  }
+}

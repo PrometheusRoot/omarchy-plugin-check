@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opc-spec"
+version = "0.1.0"
+description = "omarchy-plugin-check provider protocol v1: schemas, vocabulary, identifiers (public)"
+readme = "PROTOCOL.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["jsonschema>=4.18", "referencing>=0.30"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-cov==7.1.0", "hypothesis==6.168.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["opc_spec"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "opc_spec/_schemas"
+"../schemas" = "opc_spec/_report_schemas"
+
+[tool.ruff]
+extend = "../standards/ruff.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D", "ANN", "PLR", "FBT"]
+
+[tool.basedpyright]
+extends = "../standards/basedpyright.json"
+include = ["opc_spec", "tests"]
+venvPath = ".."
+venv = ".venv"
+executionEnvironments = [
+  { root = "tests", reportUnknownArgumentType = false, reportUnknownVariableType = false, reportUnknownMemberType = false, reportUnknownParameterType = false, reportUnknownLambdaType = false, reportMissingParameterType = false, reportMissingTypeArgument = false, reportPrivateUsage = false },
+  { root = "opc_spec" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --cov=opc_spec --cov-branch --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+branch = true
+source = ["opc_spec"]
+
+[tool.coverage.report]
+fail_under = 100  # pure protocol package: held at 100 (docs/ENGINEERING.md#coverage-and-mutation-targets)
+
+[tool.deptry]
+known_first_party = ["opc_spec"]
+
+[tool.importlinter]
+root_package = "opc_spec"
+include_external_packages = true
+
+# ADR-0026: the public spec is the bottom of the public stack; it imports nothing of ours.
+[[tool.importlinter.contracts]]
+name = "spec imports no other package of this repo"
+type = "forbidden"
+source_modules = ["opc_spec"]
+forbidden_modules = ["opsec", "opsec_orch", "opc_aggregator", "opc_collector"]
+
+[[tool.importlinter.contracts]]
+name = "spec is pure (no network, no processes)"
+type = "forbidden"
+source_modules = ["opc_spec.vocab", "opc_spec.ids", "opc_spec.marketplace", "opc_spec.jsonv"]
+forbidden_modules = ["subprocess", "socket", "urllib", "http", "os", "shutil"]

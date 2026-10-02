@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "provider": "example",
+  "version": 1759320000,
+  "generatedAt": "2026-10-01T12:00:00Z",
+  "expires": "2026-10-31T12:00:00Z",
+  "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
+  "entries": [
+    {
+      "pluginId": "example.clock",
+      "repo": "https://github.com/example/clock",
+      "commit": "1111111111111111111111111111111111111111",
+      "tree": "2222222222222222222222222222222222222222",
+      "timeReviewed": "2026-10-01T12:00:00Z",
+      "verdict": "caution",
+      "path": "statements/example.clock/1111111111111111111111111111111111111111.json",
+      "sha256": "3285d285e35dc9f4f975369e04614f7b62465c115d8c60e8050fa7a6aa003c21"
+    }
+  ]
+}

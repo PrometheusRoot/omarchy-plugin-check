@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/api-meta.schema.json",
+  "title": "Aggregated API meta (api/v1/meta.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "apiVersion", "generatedAt", "predicateType", "catalogGeneratedAt", "registry", "providers", "pluginCount", "counts", "rejected"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "apiVersion": { "const": "v1" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "predicateType": { "type": "string" },
+    "catalogGeneratedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "expires", "dev", "signed"],
+      "properties": {
+        "version": { "type": "integer" },
+        "expires": { "$ref": "common.schema.json#/$defs/dateTime" },
+        "dev": { "type": "boolean" },
+        "signed": { "type": "boolean" }
+      }
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "tier", "verification", "feedVersion", "feedExpires", "rows", "status"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/providerId" },
+          "name": { "type": "string" },
+          "tier": { "$ref": "common.schema.json#/$defs/tier" },
+          "verification": { "$ref": "common.schema.json#/$defs/verification" },
+          "feedVersion": { "type": ["integer", "null"] },
+          "feedExpires": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] },
+          "rows": { "type": "integer", "minimum": 0 },
+          "status": { "type": "string", "maxLength": 300, "description": "ok, or why the feed was rejected (expired, rollback, signature, ...)." }
+        }
+      }
+    },
+    "pluginCount": { "type": "integer", "minimum": 0 },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["safe", "caution", "risky", "blocked", "unknown"],
+      "properties": {
+        "safe": { "type": "integer" }, "caution": { "type": "integer" }, "risky": { "type": "integer" },
+        "blocked": { "type": "integer" }, "unknown": { "type": "integer" }
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "path", "reason"],
+        "properties": { "provider": { "type": "string" }, "path": { "type": "string" }, "reason": { "type": "string", "maxLength": 300 } }
+      }
+    }
+  }
+}

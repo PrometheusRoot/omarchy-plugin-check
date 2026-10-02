@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/feed-index.schema.json",
+  "title": "Provider feed index v1 (feed/v1/index.json)",
+  "description": "Signed by the provider (index.json.sigstore.json). Consumers reject an index that is expired, whose version is lower than one already seen (rollback), or whose provider/predicateType does not match the registry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "provider", "version", "generatedAt", "expires", "predicateType", "entries"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "provider": { "$ref": "common.schema.json#/$defs/providerId" },
+    "version": { "type": "integer", "minimum": 1, "description": "Strictly increasing per publish (e.g. unix seconds)." },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "expires": { "$ref": "common.schema.json#/$defs/dateTime", "description": "At most 30 days after generatedAt; republish before it passes." },
+    "predicateType": { "type": "string", "pattern": "^https://[^\\s]+/attestation/security-review/v1$" },
+    "entries": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pluginId", "repo", "commit", "timeReviewed", "verdict", "path", "sha256"],
+        "properties": {
+          "pluginId": { "$ref": "common.schema.json#/$defs/pluginId" },
+          "repo": { "$ref": "common.schema.json#/$defs/repoUrl" },
+          "commit": { "$ref": "common.schema.json#/$defs/sha1" },
+          "tree": { "$ref": "common.schema.json#/$defs/sha1" },
+          "timeReviewed": { "$ref": "common.schema.json#/$defs/dateTime" },
+          "verdict": { "$ref": "common.schema.json#/$defs/verdict", "description": "Hint for listing only; consumers use the verdict inside the verified statement." },
+          "path": { "$ref": "common.schema.json#/$defs/relPath", "description": "Feed-relative path of the attestation: a Sigstore bundle (*.sigstore.json) or, for unsigned dev providers, the bare statement (*.json)." },
+          "sha256": { "$ref": "common.schema.json#/$defs/sha256", "description": "Digest of the file at `path`; binds the attestation to this signed index." }
+        }
+      }
+    }
+  }
+}

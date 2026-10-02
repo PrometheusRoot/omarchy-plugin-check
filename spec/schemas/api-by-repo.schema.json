@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/api-by-repo.schema.json",
+  "title": "Repository to plugin ids (api/v1/by-repo.json)",
+  "description": "Keys are case-folded 'owner/name' (also previous names from repositoryMigrations), so a client can map `git remote get-url origin` of an installed plugin to marketplace ids.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "repos"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "repos": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9_.-]+/[a-z0-9_.-]+$" },
+      "additionalProperties": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/pluginId" } }
+    }
+  }
+}

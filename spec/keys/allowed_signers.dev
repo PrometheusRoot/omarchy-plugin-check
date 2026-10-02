@@ -1,0 +1,4 @@
+# DEV ONLY - development snapshot/registry key (private half lives outside the repo:
+# ~/.config/omarchy-plugin-check/dev-snapshot-key). Snapshots signed with it carry "dev": true.
+# Never trust this file in a release; the production key will be added as allowed_signers.
+omarchy-plugin-check namespaces="omarchy-plugin-check-snapshot,omarchy-plugin-check-providers" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFer914fCX5mEfCzfB0sOB5hZZCHrU9KU48Lc1ZsUNg4

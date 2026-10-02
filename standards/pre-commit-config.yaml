@@ -59,7 +59,7 @@ repos:
         name: JSON Schemas are valid draft 2020-12
         entry: scripts/tool check-jsonschema --check-metaschema
         language: system
-        files: ^schemas/.*\.schema\.json$
+        files: ^(schemas|spec/schemas)/.*\.schema\.json$
       - id: workflows-schema
         name: workflows match the GitHub schema
         entry: scripts/tool check-jsonschema --builtin-schema vendor.github-workflows

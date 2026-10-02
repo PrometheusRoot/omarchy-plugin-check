@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheusroot.github.io/omarchy-plugin-check/spec/v1/store.schema.json",
+  "title": "Store snapshot v1 (store.json)",
+  "description": "One compact, signed file the CLI and the store app load at start (ADR-0013, ADR-0014). Signed detached: store.json.sig = `ssh-keygen -Y sign -n omarchy-plugin-check-snapshot`. Clients reject a bad signature, an expired snapshot and a version lower than the last one they accepted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "version", "generatedAt", "expires", "dev", "catalog", "imageBase", "apiBase", "providers", "ranking", "shelves", "categories", "plugins"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "omarchy-plugin-check/store" },
+    "version": { "type": "integer", "minimum": 1, "description": "Strictly increasing (unix seconds of generation)." },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "expires": { "$ref": "common.schema.json#/$defs/dateTime" },
+    "dev": { "type": "boolean", "description": "true = signed with a DEV key and/or contains unsigned-dev provider rows. Never true for a published snapshot." },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generatedAt", "plugins", "retired", "builtin"],
+      "properties": {
+        "generatedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] },
+        "plugins": { "type": "integer" },
+        "retired": { "type": "integer" },
+        "builtin": { "type": "integer" }
+      }
+    },
+    "imageBase": { "type": "string", "description": "Prefix for relative marketplace image paths (img.thumb / img.full)." },
+    "apiBase": { "type": "string", "description": "Base for `report` paths (api/v1/)." },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "tier", "verification", "rows"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/providerId" },
+          "name": { "type": "string" },
+          "tier": { "$ref": "common.schema.json#/$defs/tier" },
+          "verification": { "$ref": "common.schema.json#/$defs/verification" },
+          "rows": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "ranking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "factors", "gates", "statsGeneratedAt"],
+      "properties": {
+        "version": { "type": "string" },
+        "factors": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": false, "required": ["id", "label", "weight"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "weight": { "type": "number", "minimum": 0 } } }
+        },
+        "gates": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 } },
+        "statsGeneratedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }] }
+      }
+    },
+    "shelves": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top", "trending", "new", "updated", "safePicks", "byCategory"],
+      "properties": {
+        "top": { "$ref": "#/$defs/ids" },
+        "trending": { "$ref": "#/$defs/ids" },
+        "new": { "$ref": "#/$defs/ids" },
+        "updated": { "$ref": "#/$defs/ids" },
+        "safePicks": { "$ref": "#/$defs/ids" },
+        "byCategory": { "type": "object", "additionalProperties": { "$ref": "#/$defs/ids" } }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": false, "required": ["name", "count"], "properties": { "name": { "type": "string" }, "count": { "type": "integer" } } }
+    },
+    "plugins": { "type": "array", "items": { "$ref": "#/$defs/plugin" } }
+  },
+  "$defs": {
+    "ids": { "type": "array", "maxItems": 100, "items": { "$ref": "common.schema.json#/$defs/pluginId" } },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "author", "desc", "cat", "kind", "tags", "repo", "state", "verif", "listed", "updated", "img", "gallery", "gh", "mkt", "rank", "score", "fac", "verdict", "report"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/pluginId" },
+        "name": { "type": "string", "maxLength": 200 },
+        "author": { "type": ["string", "null"], "maxLength": 200 },
+        "desc": { "type": ["string", "null"], "maxLength": 1000 },
+        "cat": { "type": ["string", "null"], "maxLength": 64 },
+        "kind": { "type": ["string", "null"], "maxLength": 64 },
+        "tags": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 64 } },
+        "repo": { "type": ["string", "null"] },
+        "path": { "type": "string", "maxLength": 512, "description": "Plugin directory in the repo when not the root." },
+        "install": { "type": "string", "maxLength": 300 },
+        "license": { "type": ["string", "null"], "maxLength": 64 },
+        "version": { "type": ["string", "null"], "maxLength": 64 },
+        "state": { "enum": ["listed", "retired", "builtin"] },
+        "verif": { "type": ["string", "null"], "maxLength": 32, "description": "Marketplace verificationStatus, verbatim." },
+        "listed": { "type": ["string", "null"] },
+        "updated": { "type": ["string", "null"] },
+        "img": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": { "thumb": { "type": "string" }, "full": { "type": "string" }, "w": { "type": "integer" }, "h": { "type": "integer" } }
+        },
+        "gallery": { "type": "array", "maxItems": 8, "items": { "type": "string", "pattern": "^https://" } },
+        "gh": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["stars", "vel30", "lastCommit", "c90", "contrib", "bus", "rel180", "lastRelease", "issues", "respH", "archived", "branch"],
+          "properties": {
+            "stars": { "type": "integer", "minimum": 0 },
+            "vel30": { "type": "integer", "minimum": 0, "description": "Stars gained in the last 30 days (estimated above 100, see docs/RANKING.md)." },
+            "lastCommit": { "type": ["string", "null"] },
+            "c90": { "type": ["integer", "null"], "minimum": 0 },
+            "contrib": { "type": ["integer", "null"], "minimum": 0, "description": "Distinct authors in the last 100 default-branch commits." },
+            "bus": { "type": ["integer", "null"], "minimum": 0, "description": "Fewest authors covering half of those commits." },
+            "rel180": { "type": ["integer", "null"], "minimum": 0 },
+            "lastRelease": { "type": ["string", "null"] },
+            "issues": { "type": ["integer", "null"], "minimum": 0 },
+            "respH": { "type": ["number", "null"], "minimum": 0, "description": "Median hours to first non-author comment, last 20 issues." },
+            "archived": { "type": "boolean" },
+            "branch": { "type": ["string", "null"] }
+          }
+        },
+        "mkt": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["views", "copies", "hearts"],
+          "properties": { "views": { "type": "integer" }, "copies": { "type": "integer" }, "hearts": { "type": "integer" } }
+        },
+        "rank": { "type": ["integer", "null"], "minimum": 1 },
+        "score": { "type": ["number", "null"], "minimum": 0 },
+        "fac": { "type": "array", "items": { "type": "number" }, "description": "Weighted factor contributions, same order as ranking.factors." },
+        "verdict": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["combined", "basis", "contested", "providers"],
+          "properties": {
+            "combined": { "$ref": "common.schema.json#/$defs/verdict" },
+            "basis": { "enum": ["trusted", "untrusted", "none"] },
+            "contested": { "type": "boolean" },
+            "commit": { "oneOf": [{ "$ref": "common.schema.json#/$defs/sha1" }, { "type": "null" }] },
+            "providers": { "type": "object", "additionalProperties": { "$ref": "common.schema.json#/$defs/verdict" } }
+          }
+        },
+        "report": { "type": ["string", "null"], "description": "apiBase-relative path of the full aggregated view." }
+      }
+    }
+  }
+}
