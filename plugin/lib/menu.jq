@@ -29,7 +29,9 @@ def is_filler: test("^\\s*$") or test("^\\s*//");
 # Insert the block before the closing brace; give the previous entry a comma if it lacks one.
 def with_block:
   . as $text
-  | ($text | rindex("}")) as $close
+  # why: jq < 1.8 returns byte offsets from string rindex; a codepoint offset is needed for slicing
+  # (the menu holds Nerd Font glyphs), so search the exploded codepoints instead.
+  | ($text | explode | rindex(125)) as $close
   | if $close == null then error("no closing } in the menu file") else . end
   | ($text[:$close] | split("\n")) as $head
   | ([range($head | length - 1; -1; -1) | select($head[.] | is_filler | not)] | first) as $last
