@@ -154,7 +154,8 @@ its full store row (`listing`, including the README `gallery`), weekly commits
 (`activity.weeks`) and each feed row's `detail.report` when the provider embedded the optional
 `report` extension (`opsec attest|feed --include-report`: capabilities, system areas, network
 hosts, dependencies + advisories, performance, code quality, maintenance, AI summary, verdict
-reasons and criteria; rule identifiers already opaque).
+reasons and criteria; rule identifiers already opaque, reasons name score bands, never
+thresholds or weights).
 
 ## 8. License of published data
 
