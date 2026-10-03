@@ -45,7 +45,8 @@ test("shield: count hidden when safe or empty; tint follows the state", () => {
   assert.equal(P.shieldLabel({ state: "risky", count: 2 }), P.ICON.shield + " 2");
   assert.equal(P.COLOR.blocked, "red");
   assert.equal(P.COLOR.stale, "blue");
-  assert.match(P.shieldTip({ state: "blocked", count: 1 }, doc), /worst: blocked \(1\)$/);
+  assert.match(P.shieldTip({ state: "blocked", count: 1 }, doc), /^omarchy-store · worst: blocked \(1\)\nclick: store · right click: verdicts/);
+  assert.match(P.shieldTip({ state: null, count: 0 }, null), /^omarchy-store · no third-party plugins\n/);
   assert.match(P.shieldTip({ state: "safe", count: 1 }, { snapshot: { ok: false } }), /no verified snapshot/);
 });
 
@@ -80,8 +81,8 @@ test("snapshot badge: verified age or the reason", () => {
 });
 
 test("argv: ids and paths are validated before they reach a shell", () => {
-  const bin = P.cliPath("file:///home/u/.config/omarchy/plugins/io.github.prometheusroot.plugin-check/");
-  assert.equal(bin, "/home/u/.config/omarchy/plugins/io.github.prometheusroot.plugin-check/bin/omarchy-plugin-check");
+  const bin = P.cliPath("file:///home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/");
+  assert.equal(bin, "/home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/bin/omarchy-plugin-check");
   assert.deepEqual(P.rescanArgv(bin), [bin, "status", "--json"]);
   assert.deepEqual(P.cardArgv(bin, "omamail"), ["omarchy-launch-floating-terminal-with-presentation", bin + " omamail"]);
   assert.equal(P.cardArgv(bin, "x; rm -rf ~"), null);
@@ -89,6 +90,11 @@ test("argv: ids and paths are validated before they reach a shell", () => {
   assert.equal(P.cardArgv("/home/my dir/bin/x", "omamail"), null);
   assert.equal(P.cliPath("file:///home/my dir/p"), "");
   assert.equal(P.rescanArgv(""), null);
+  const dir = "file:///home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/";
+  assert.deepEqual(P.storeArgv(dir), ["/home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/store/bin/omarchy-store"]);
+  assert.equal(P.storeArgv("file:///home/my dir/p"), null);
+  assert.equal(P.storeArgv("file:///home/u/$(id)"), null);
+  assert.equal(P.PLUGIN_ID, "io.github.prometheusroot.omarchy-store");
   assert.deepEqual(P.removeArgv("omamail"), ["omarchy-launch-floating-terminal-with-presentation", "omarchy plugin remove omamail"]);
   assert.equal(P.removeArgv("$(id)"), null);
   assert.deepEqual(P.openArgv(P.SITE), ["xdg-open", P.SITE]);

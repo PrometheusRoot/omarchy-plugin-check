@@ -9,8 +9,9 @@ import "../lib/data.mjs" as Data
 
 // Install through `omarchy-plugin-check --add --pin <repo>`, update / roll back through
 // `omarchy-plugin-check pin --yes <id>` (ADR-0035), remove through omarchy (argv, never a
-// shell string; lib/install.mjs). The checker CLI may be absent: install is then
-// disabled with "checker not installed". `--dev` swaps in a fake runner that replays the
+// shell string; lib/install.mjs). The checker is the copy shipped next to the store (bin/ in
+// the omarchy-store repository, plugin/bin/ here; ADR-0042), run by absolute path; without
+// one, install is disabled with "checker not installed". `--dev` swaps in a fake runner that replays the
 // state machine, and a fixed installed list, so every dialog and state can be exercised.
 Singleton {
     id: root
@@ -18,6 +19,8 @@ Singleton {
     readonly property bool dev: Quickshell.env("OPC_STORE_DEV") === "1"
     property bool checker: false
     property bool probed: false
+    // Absolute path of the checker CLI ("" until probed or when there is none).
+    property string bin: ""
     readonly property bool canInstall: checker || dev
     readonly property string why: canInstall ? "" : "checker not installed"
 
@@ -77,7 +80,7 @@ Singleton {
             fake.restart();
             return;
         }
-        const argv = repin ? Inst.pinCommand(rec) : Inst.command(rec);
+        const argv = repin ? Inst.pinCommand(rec, bin) : Inst.command(rec, bin);
         if (!argv) {
             flow = Inst.reduce(flow, {
                 type: "exit",
@@ -124,6 +127,12 @@ Singleton {
         installed = map;
         installedVersion++;
         removed(r.id);
+    }
+
+    // Re-read `status --json` (after a snapshot update the verdicts may have changed).
+    function refresh() {
+        if (!dev && probed && !probe.running)
+            probe.running = true;
     }
 
     function stateOf(r) {
@@ -176,12 +185,19 @@ Singleton {
         id: remover
     }
 
+    // The checker next to the store first, else PATH's (lib/install.mjs probeArgv).
     Process {
         running: true
-        command: ["sh", "-c", "command -v omarchy-plugin-check"]
-        onExited: code => {
-            root.checker = code === 0;
+        command: Inst.probeArgv(Inst.checkerCandidates(Quickshell.shellDir))
+        stdout: StdioCollector {
+            id: finderOut
+        }
+        onExited: {
+            root.bin = Inst.checkerPath(finderOut.text);
+            root.checker = root.bin !== "";
             root.probed = true;
+            if (!root.dev)
+                probe.running = true;
         }
     }
 
@@ -191,8 +207,7 @@ Singleton {
     Process {
         id: probe
 
-        running: !root.dev
-        command: ["sh", "-c", "if command -v omarchy-plugin-check >/dev/null 2>&1; then exec omarchy-plugin-check status --json; fi; for d in \"$HOME\"/.config/omarchy/plugins/*/; do [ -d \"$d\" ] || continue; printf '%s %s\\n' \"$(basename \"$d\")\" \"$(git -C \"$d\" rev-parse HEAD 2>/dev/null)\"; done"]
+        command: root.checker ? [root.bin, "status", "--json"] : ["sh", "-c", "for d in \"$HOME\"/.config/omarchy/plugins/*/; do [ -d \"$d\" ] || continue; printf '%s %s\\n' \"$(basename \"$d\")\" \"$(git -C \"$d\" rev-parse HEAD 2>/dev/null)\"; done"]
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {

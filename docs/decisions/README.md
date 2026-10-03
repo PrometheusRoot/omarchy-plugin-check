@@ -47,3 +47,4 @@ New ADR: copy [0000-template.md](0000-template.md) to the next number, keep it t
 | [0039](0039-production-key-lives-in-the-data-repo-which-signs-the-feed-and-publishes-to-pages.md) | The production key lives in the data repo, which signs the feed keyless and publishes the snapshot to its Pages | accepted | 2026-10-03 |
 | [0040](0040-private-scanner-decision.md) | Private scanner decision | accepted (private) | 2026-10-03 |
 | [0041](0041-rebase-merge-linear-history-conventional-commits-per-commit.md) | Rebase-merge onto a linear history; every commit is a Conventional Commit | accepted | 2026-10-03 |
+| [0042](0042-omarchy-store-one-repo-one-command-the-bar-opens-the-store.md) | omarchy-store: one repository, one command; the bar opens the store | accepted | 2026-10-03 |

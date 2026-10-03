@@ -3,8 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "../lib/format.mjs" as F
 
-// App header (mockup `.hdr`): mark + "store", tabs with key caps, search field with live
-// latency, snapshot age chip.
+// App header (mockup `.hdr`): mark + "omarchy-store" over the not-affiliated notice, tabs
+// with key caps, search field with live latency, snapshot age chip.
 Rectangle {
     id: hdr
 
@@ -43,11 +43,22 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            Txt {
-                text: "store"
-                size: 13
-                weight: Font.DemiBold
-                font.letterSpacing: -0.3
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+
+                Txt {
+                    text: "omarchy-store"
+                    size: 13
+                    weight: Font.DemiBold
+                    font.letterSpacing: -0.3
+                }
+
+                Txt {
+                    text: "community · not affiliated with Omarchy"
+                    size: 8
+                    color: Theme.muted
+                }
             }
         }
 

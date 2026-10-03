@@ -10,7 +10,7 @@ import "../lib/nav.mjs" as Nav
 FloatingWindow {
     id: win
 
-    title: "omarchy plugin store"
+    title: "omarchy-store"
     implicitWidth: 1280
     implicitHeight: 800
     minimumSize: Qt.size(960, 600)
@@ -70,6 +70,8 @@ FloatingWindow {
     function dialogCtx() {
         if (Store.dialog === "install")
             return Installer.state === "confirm" ? "confirm" : Installer.state || "install";
+        if (Store.dialog === "extras")
+            return Extras.state === "confirm" ? "confirm" : "extras";
         return Store.dialog;
     }
 
@@ -145,6 +147,9 @@ FloatingWindow {
             return true;
         case "section":
             Store.section = a.arg;
+            return true;
+        case "extras":
+            Extras.open(false);
             return true;
         default:
             return false;

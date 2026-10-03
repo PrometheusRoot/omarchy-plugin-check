@@ -86,3 +86,10 @@ test("grid cursor movement", () => {
   assert.deepEqual(N.gridRows(14, 6), [6, 6, 2]);
   assert.deepEqual(N.gridRows(0, 6), []);
 });
+
+test("status tab: e opens the extras dialog (ADR-0042); elsewhere e does nothing", () => {
+  assert.deepEqual(N.keyAction("e", { tab: "status" }), { action: "extras" });
+  assert.deepEqual(N.keyAction("e", { tab: "home" }), { action: "none" });
+  assert.deepEqual(N.keyAction("y", { tab: "status", dialog: "confirm" }), { action: "confirm" });
+  assert.deepEqual(N.keyAction("y", { tab: "status", dialog: "extras" }), { action: "none" });
+});

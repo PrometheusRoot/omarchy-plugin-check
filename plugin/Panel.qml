@@ -7,10 +7,11 @@ import Quickshell.Wayland
 import qs.Commons
 import "lib/panel.mjs" as P
 
-// Plugin check panel (kind "panel"; mockup "panel · Panel.qml"). Summoned by the bar shield
-// (`omarchy-shell shell toggle io.github.prometheusroot.plugin-check`). Reads the cached
-// ~/.cache/omarchy-plugin-check/status.json (FileView, watched); never polls. Rescan runs
-// `omarchy-plugin-check status --json` once. Logic lives in lib/panel.mjs.
+// omarchy-store verdict panel (kind "panel"; mockup "panel · Panel.qml"). Summoned by a right
+// click on the bar shield (`omarchy-shell shell toggle io.github.prometheusroot.omarchy-store`).
+// Reads the cached ~/.cache/omarchy-plugin-check/status.json (FileView, watched); never polls.
+// Rescan runs `omarchy-plugin-check status --json` once; "store" opens the store window
+// (store/bin/omarchy-store, single instance). Logic lives in lib/panel.mjs.
 Item {
     id: root
 
@@ -27,6 +28,7 @@ Item {
 
     readonly property string home: Quickshell.env("HOME")
     readonly property string bin: P.cliPath(Qt.resolvedUrl("."))
+    readonly property var storeArgv: P.storeArgv(Qt.resolvedUrl("."))
     readonly property var worst: P.worst(status)
     readonly property var rows: P.rows(status)
     readonly property var badge: P.snapshotBadge(status, now)
@@ -73,6 +75,11 @@ Item {
     function run(argv) {
         if (argv)
             Quickshell.execDetached(argv);
+    }
+
+    function openStore() {
+        run(storeArgv);
+        dismiss();
     }
 
     function openCard(row) {
@@ -156,6 +163,8 @@ Item {
                 Keys.onPressed: function (e) {
                     if (e.text === "r")
                         root.rescan();
+                    else if (e.text === "s")
+                        root.openStore();
                     else if (e.key === Qt.Key_J || e.key === Qt.Key_Down)
                         root.cursor = Math.min(root.rows.length - 1, root.cursor + 1);
                     else if (e.key === Qt.Key_K || e.key === Qt.Key_Up)
@@ -193,7 +202,7 @@ Item {
                         anchors.left: mark.right
                         anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "plugin check"
+                        text: P.APP
                         color: root.fg
                         font.family: root.mono
                         font.pixelSize: root.type.heading
@@ -377,6 +386,14 @@ Item {
                         spacing: 6
 
                         FooterButton {
+                            primary: true
+                            visible: root.storeArgv !== null
+                            icon: P.ICON.store
+                            label: "store"
+                            onActivated: root.openStore()
+                        }
+
+                        FooterButton {
                             icon: P.ICON.rescan
                             label: root.scanning ? "scanning…" : "rescan"
                             onActivated: root.rescan()
@@ -426,13 +443,14 @@ Item {
 
         property string icon: ""
         property string label: ""
+        property bool primary: false
 
         signal activated
 
         width: btnText.implicitWidth + 24
         height: 30
-        color: btnHover.containsMouse ? Qt.alpha(root.fg, 0.08) : "transparent"
-        border.color: Qt.alpha(root.fg, 0.25)
+        color: primary ? (btnHover.containsMouse ? Qt.alpha(root.pal.green, 0.85) : root.pal.green) : btnHover.containsMouse ? Qt.alpha(root.fg, 0.08) : "transparent"
+        border.color: primary ? root.pal.green : Qt.alpha(root.fg, 0.25)
         border.width: 1
 
         Text {
@@ -440,7 +458,8 @@ Item {
 
             anchors.centerIn: parent
             text: btn.icon + "  " + btn.label
-            color: root.fg
+            color: btn.primary ? root.pal.bg : root.fg
+            font.weight: btn.primary ? Font.DemiBold : Font.Normal
             font.family: root.mono
             font.pixelSize: root.type.body
         }

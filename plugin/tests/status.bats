@@ -140,3 +140,11 @@ state_of() { jq -r --arg d "$1" '.plugins[] | select(.dir | endswith("/" + $d)) 
   run "${CLI}" status --json
   [ "$(jq -r '.plugins[] | select(.id == "test.safe-clock") | "\(.state) \(.repin)"' <<< "${output}")" = "safe null" ]
 }
+
+@test "the installed omarchy-store itself is not listed as a plugin under review" {
+  checkout test/safe-clock test.safe-clock
+  mv "${PLUGIN}" "${P}/io.github.prometheusroot.omarchy-store"
+  run "${P}/io.github.prometheusroot.omarchy-store/bin/omarchy-plugin-check" status --json
+  [ "${status}" -eq 0 ]
+  jq -e '[.plugins[].id] == ["test.safe-clock"]' <<< "${output}"
+}

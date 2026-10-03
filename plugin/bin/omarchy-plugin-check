@@ -9,12 +9,13 @@
 #   omarchy-plugin-check status [--json]                   installed plugins vs reviewed commits
 #   omarchy-plugin-check pin [--yes] <id>                  move an installed plugin to its reviewed commit
 #   omarchy-plugin-check update [<url|path>]               fetch + verify the signed snapshot / bundle
-#   omarchy-plugin-check setup [--uninstall]               CLI link + Omarchy menu entries
+#   omarchy-plugin-check setup [--uninstall] [--plan] [--json] [--yes]
+#                                                          links, Omarchy menu entries, store keybind
 # Exit: 0 ok · 1 error/aborted · 2 refused (blocked, retired) · 3 unlisted · 4 no verified snapshot
 set -Eeuo pipefail
 shopt -s nullglob
 
-readonly VERSION="0.1.0"
+readonly VERSION="0.2.0"
 readonly INDEX_FORMAT=2 # bump when lib/index.jq changes shape: rebuilds cached indexes
 self=$(readlink -f -- "${BASH_SOURCE[0]}")
 root=$(cd -- "$(dirname -- "${self}")/.." && pwd)
@@ -52,7 +53,7 @@ interactive() { [[ -t 0 && -t 1 ]]; }
 J() { jq -L "${lib}" "$@"; }
 
 usage() {
-  sed -n '6,14p' "${self}" | sed 's/^# \{0,1\}//'
+  sed -n '6,15p' "${self}" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------- snapshot (ADR-0028, bundle: ADR-0032)
@@ -534,7 +535,8 @@ cmd_status() {
   load
   mkdir -p -- "${cache}"
   for d in "${plugins_dir}"/*/; do
-    local_json "${d%/}"
+    # The store/checker itself is not a plugin under review here (ADR-0042).
+    if [[ $(readlink -f -- "${d%/}") != "${root}" ]]; then local_json "${d%/}"; fi
   done | jq -s -c . > "${tmp}/local.json"
   [[ ${snap_ok} == 1 ]] || echo '{"ids":{},"repos":{},"providers":{}}' > "${tmp}/index.json"
   if [[ ${snap_ok} == 1 ]]; then
@@ -670,63 +672,182 @@ pin_plan() { # pin_plan FACTS PREV -> sets ${plan}; prints its lines; exits on a
   if [[ $(jq -r .action <<< "${plan}") == refuse ]]; then exit "$(jq -r .code <<< "${plan}")"; fi
 }
 
+# ---------------------------------------------------------------- setup (ADR-0042)
+#
+# Opt-in extras: CLI links in ~/.local/bin, Omarchy menu entries, a store keybind. One set of
+# facts feeds both the plan (lib/setup.jq: what the store's confirm dialog lists) and the
+# apply below; every edited file is backed up first and every edit is a marked block.
+
+store_bin="${root}/store/bin/omarchy-store"
+hypr_dir="${HOME}/.config/hypr"
+safe_path() { [[ $1 =~ ^[A-Za-z0-9_./-]+$ ]]; }
+has_store() { [[ -x ${store_bin} ]] && safe_path "${store_bin}"; }
+
 menu_entries() {
   local bin="omarchy-plugin-check"
-  if [[ ${self} =~ ^[A-Za-z0-9_./-]+$ ]]; then bin=${self}; fi
-  # icons: nerd font shield-check (U+F0CC8) and shield (U+F0499)
-  jq -n -c --arg bin "${bin}" --arg q "'" '{
+  if safe_path "${self}"; then bin=${self}; fi
+  # icons: nerd font shield-check (U+F0CC8), shield (U+F0499), store (U+F04DC)
+  jq -n -c --arg bin "${bin}" --arg store "$(has_store && echo "${store_bin}" || true)" --arg q "'" '{
     "setup.plugin.check": {icon: ([986312] | implode), label: "Check Plugin",
       description: "Commit-bound safety verdict before you add a plugin",
       action: "omarchy-launch-floating-terminal-with-presentation \($q)\($bin) check\($q)"},
     "setup.plugin.audit": {icon: ([984217] | implode), label: "Audit Plugins",
       description: "Installed plugins against their reviewed commits",
-      action: "omarchy-launch-floating-terminal-with-presentation \($q)\($bin) status\($q)"}}'
+      action: "omarchy-launch-floating-terminal-with-presentation \($q)\($bin) status\($q)"}}
+    + if $store == "" then {} else {"install.plugin-store": {icon: ([984284] | implode), label: "Plugin Store",
+      description: "omarchy-store: browse and install reviewed plugins", action: $store}} end'
 }
 
-edit_menu() { # edit_menu add|remove
+menu_labels() {
+  if has_store; then
+    printf '%s\n' '["Install › Plugin Store", "Setup › Plugins › Check Plugin", "Setup › Plugins › Audit Plugins"]'
+  else
+    printf '%s\n' '["Setup › Plugins › Check Plugin", "Setup › Plugins › Audit Plugins"]'
+  fi
+}
+
+# menu_render add|remove -> ${tmp}/menu.jsonc (the file as it would be); dies on a broken menu file
+menu_render() {
   local src=${menu_file}
-  [[ -f ${src} ]] || {
-    [[ $1 == add ]] || return 0
-    src=/dev/null
-  }
+  [[ -f ${src} ]] || src=/dev/null
   J -R -s -j --arg mode "$1" --argjson entries "$(menu_entries)" -f "${lib}/menu.jq" "${src}" > "${tmp}/menu.jsonc" \
     || die "menu: left ${menu_file} untouched"
-  if [[ -f ${menu_file} ]] && cmp -s -- "${tmp}/menu.jsonc" "${menu_file}"; then
-    ok "menu: already $([[ $1 == add ]] && echo set up || echo clean)"
-    return
-  fi
-  mkdir -p -- "$(dirname -- "${menu_file}")"
-  if [[ -f ${menu_file} ]]; then
-    cp -p -- "${menu_file}" "${menu_file}.bak.$(date +%Y%m%d%H%M%S)"
-  fi
-  cat -- "${tmp}/menu.jsonc" > "${menu_file}"
-  ok "menu: $([[ $1 == add ]] && echo "Setup › Plugins › Check Plugin / Audit Plugins" || echo "entries removed") (${menu_file/#"${HOME}"/\~}; backup kept)"
 }
 
-cmd_setup() {
-  local link="${HOME}/.local/bin/omarchy-plugin-check"
-  if [[ ${1:-} == --uninstall ]]; then
-    if [[ -L ${link} && $(readlink -f -- "${link}") == "${self}" ]]; then
-      rm -f -- "${link}"
-      ok "removed ${link/#"${HOME}"/\~}"
-    fi
-    edit_menu remove
+menu_changes() { # menu_changes add|remove -> true when the menu file would change
+  menu_render "$1"
+  if [[ -f ${menu_file} ]]; then
+    if cmp -s -- "${tmp}/menu.jsonc" "${menu_file}"; then echo false; else echo true; fi
+  elif [[ $1 == add ]]; then echo true; else echo false; fi
+}
+
+# The bindings file Omarchy users edit: Lua (current Omarchy) or hyprlang (older).
+bind_file() {
+  if [[ -f ${hypr_dir}/bindings.lua ]]; then
+    printf '%s lua\n' "${hypr_dir}/bindings.lua"
+  elif [[ -f ${hypr_dir}/bindings.conf ]]; then
+    printf '%s conf\n' "${hypr_dir}/bindings.conf"
+  fi
+}
+
+# bind_render MODE FILE FORMAT KEY -> ${tmp}/bindings (the file as it would be)
+bind_render() {
+  jq -R -s -j --arg mode "$1" --arg format "$3" --arg key "$4" --arg cmd "${store_bin}" -f "${lib}/hypr.jq" "$2" > "${tmp}/bindings"
+}
+
+# keybind_facts MODE -> {path, format, key, keep, checked, taken, current, change, reason}
+keybind_facts() {
+  local mode=$1 file format current binds pick change=false reason=""
+  read -r file format < <(bind_file) || true
+  if [[ -z ${file:-} ]]; then
+    jq -n -c '{path: "", format: "", key: null, keep: false, checked: false, taken: [], current: "", change: false, reason: ""}'
     return
   fi
-  mkdir -p -- "${HOME}/.local/bin"
-  if [[ -L ${link} && $(readlink -f -- "${link}") == "${self}" ]]; then
-    ok "CLI: ${link/#"${HOME}"/\~} already links here"
+  current=$(jq -R -s -j --arg mode current --arg format "${format}" --arg key "" --arg cmd "" -f "${lib}/hypr.jq" "${file}")
+  # Read-only: which keys are bound right now (null when Hyprland cannot be asked).
+  binds=$(hyprctl -j binds 2> /dev/null | jq -c 'if type == "array" then . else null end' 2> /dev/null || true)
+  pick=$(jq -c --arg current "${current}" -f "${lib}/keybind.jq" <<< "${binds:-null}")
+  if [[ ${mode} == remove ]]; then
+    [[ -z ${current} ]] || change=true
+  elif ! has_store; then
+    reason="no store app next to the checker (${store_bin/#"${HOME}"/\~})"
+  elif [[ $(jq -r '.key // empty' <<< "${pick}") != "" ]]; then
+    bind_render add "${file}" "${format}" "$(jq -r .key <<< "${pick}")"
+    cmp -s -- "${tmp}/bindings" "${file}" || change=true
+  fi
+  jq -c --arg path "${file}" --arg format "${format}" --arg current "${current}" --argjson change "${change}" \
+    --arg reason "${reason}" '. + {path: $path, format: $format, current: $current, change: $change, reason: $reason}' <<< "${pick}"
+}
+
+link_facts() { # link_facts NAME TARGET -> {name, path, target, state}
+  local path="${HOME}/.local/bin/$1" state=absent
+  if [[ -L ${path} && $(readlink -f -- "${path}") == "$(readlink -f -- "$2")" ]]; then
+    state=ours
+  elif [[ -e ${path} || -L ${path} ]]; then
+    state=foreign
+  fi
+  jq -n -c --arg name "$1" --arg path "${path}" --arg target "$2" --arg state "${state}" '$ARGS.named'
+}
+
+setup_facts() { # setup_facts add|remove -> facts JSON (lib/setup.jq input)
+  local links
+  links=$(
+    link_facts omarchy-plugin-check "${self}"
+    if has_store; then link_facts omarchy-store "${store_bin}"; fi
+  )
+  jq -n -c --arg mode "$1" --arg home "${HOME}" --argjson links "$(jq -s -c . <<< "${links}")" \
+    --argjson menu "$(jq -n -c --arg path "${menu_file}" --argjson change "$(menu_changes "$1")" \
+      --argjson labels "$(menu_labels)" '$ARGS.named')" \
+    --argjson keybind "$(keybind_facts "$1")" '$ARGS.named'
+}
+
+backup() { # backup FILE: a timestamped copy next to it
+  [[ ! -f $1 ]] || cp -p -- "$1" "$1.bak.$(date +%Y%m%d%H%M%S)"
+}
+
+apply_setup() { # apply_setup FACTS
+  local facts=$1 mode path target state kb
+  mode=$(jq -r .mode <<< "${facts}")
+  while IFS=$'\t' read -r _ path target state; do
+    if [[ ${mode} == add && ${state} != ours ]]; then
+      mkdir -p -- "${path%/*}"
+      [[ ${state} != foreign ]] || mv -- "${path}" "${path}.bak.$(date +%Y%m%d%H%M%S)"
+      ln -s -- "${target}" "${path}"
+      ok "linked ${path/#"${HOME}"/\~}"
+    elif [[ ${mode} == remove && ${state} == ours ]]; then
+      rm -f -- "${path}"
+      ok "removed ${path/#"${HOME}"/\~}"
+    fi
+  done < <(jq -r '.links[] | [.name, .path, .target, .state] | @tsv' <<< "${facts}")
+  if [[ $(jq -r .menu.change <<< "${facts}") == true ]]; then
+    menu_render "${mode}"
+    mkdir -p -- "$(dirname -- "${menu_file}")"
+    backup "${menu_file}"
+    cat -- "${tmp}/menu.jsonc" > "${menu_file}"
+    ok "menu: $([[ ${mode} == add ]] && echo "entries added" || echo "entries removed") (${menu_file/#"${HOME}"/\~}; backup kept)"
+  fi
+  kb=$(jq -c .keybind <<< "${facts}")
+  if [[ $(jq -r '.change and .reason == ""' <<< "${kb}") == true ]]; then
+    path=$(jq -r .path <<< "${kb}")
+    bind_render "${mode}" "${path}" "$(jq -r .format <<< "${kb}")" "$(jq -r '.key // ""' <<< "${kb}")"
+    backup "${path}"
+    cat -- "${tmp}/bindings" > "${path}"
+    ok "keybind: $([[ ${mode} == add ]] && jq -r '.key + " → omarchy-store"' <<< "${kb}" || echo removed) (${path/#"${HOME}"/\~}; backup kept)"
+  fi
+}
+
+# setup [--uninstall] [--plan] [--json] [--yes]: --plan prints what would change and stops;
+# otherwise asks (a terminal) or needs --yes (scripts, the store after its own confirm).
+cmd_setup() {
+  local mode=add plan_only=false json=false yes=false facts plan arg
+  for arg in "$@"; do
+    case ${arg} in
+      --uninstall) mode=remove ;;
+      --plan) plan_only=true ;;
+      --json) json=true ;;
+      --yes | -y) yes=true ;;
+      *) die "setup: unknown option ${arg}" ;;
+    esac
+  done
+  facts=$(setup_facts "${mode}")
+  plan=$(J -c -f "${lib}/setup.jq" <<< "${facts}")
+  if [[ ${json} == true ]]; then
+    printf '%s\n' "${plan}"
   else
-    [[ ! -e ${link} && ! -L ${link} ]] || mv -- "${link}" "${link}.bak.$(date +%Y%m%d%H%M%S)"
-    ln -s -- "${self}" "${link}"
-    ok "CLI: ${link/#"${HOME}"/\~} -> ${self/#"${HOME}"/\~}"
+    jq -r '.changes[] | "  " + ({create: "+", edit: "+", replace: "~", remove: "-", keep: "=", skip: "·"}[.action]) + " " + .text' <<< "${plan}"
   fi
-  edit_menu add
-  if command -v omarchy-plugin-store > /dev/null; then
-    say "  hint: a store keybind, in ~/.config/hypr/bindings.lua (pick a free key):"
-    say "        o.bind(\"SUPER + ALT + P\", \"Plugin store\", \"omarchy-plugin-store\")"
+  [[ ${plan_only} == false ]] || return 0
+  if [[ $(jq -r .pending <<< "${plan}") != true ]]; then
+    [[ ${json} == true ]] || ok "nothing to change"
+    return 0
   fi
-  [[ -s ${cache}/store.json ]] || say "  next: omarchy-plugin-check update"
+  if [[ ${yes} != true ]]; then
+    interactive || die "setup: pass --yes to apply without a prompt"
+    confirm "Apply these changes?" || die "setup: nothing changed"
+  fi
+  apply_setup "${facts}" > "${tmp}/applied"
+  [[ ${json} == true ]] || cat -- "${tmp}/applied"
+  if [[ ${mode} == add && ! -s ${cache}/store.json && ${json} != true ]]; then say "  next: omarchy-plugin-check update"; fi
 }
 
 main() {

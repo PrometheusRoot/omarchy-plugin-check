@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# omarchy-store: launch the store app, its own Quickshell process and floating 1280x800 window
+# (ADR-0014). Single instance: when the window is open it is focused instead (ADR-0042).
+# The bar shield runs this by absolute path from the installed plugin; no PATH setup needed.
+#   omarchy-store [--dev]     --dev: fake install runner, sample installed list, `t` themes
+# OPC_STORE_T0 (ms since epoch) lets the app report cold start from launch, not QML load.
+set -euo pipefail
+
+here=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+title="omarchy-store"
+
+if [[ ${1:-} == "--dev" ]]; then
+  export OPC_STORE_DEV=1
+  shift
+fi
+OPC_STORE_T0=$(date +%s%3N)
+export OPC_STORE_T0
+
+window() { # the address of the store window, or nothing
+  hyprctl clients -j 2> /dev/null | jq -r --arg t "$title" 'first(.[] | select(.title == $t) | .address) // empty' 2> /dev/null || true
+}
+
+# Lua dispatchers (current Hyprland), then the legacy syntax.
+dispatch() {
+  hyprctl dispatch "$1" > /dev/null 2>&1 || hyprctl dispatch "${@:2}" > /dev/null 2>&1 || true
+}
+
+addr=$(window)
+if [[ -n $addr ]]; then
+  dispatch "hl.dsp.focus({ window = \"address:$addr\" })" focuswindow "address:$addr"
+  exit 0
+fi
+
+# -n: a second launch racing this one exits instead of opening a second window.
+qs -n -p "$here" "$@" &
+
+# Float + size + center once the toplevel maps.
+for _ in $(seq 1 60); do
+  addr=$(window)
+  if [[ -n $addr ]]; then
+    w="address:$addr"
+    floating=$(hyprctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .floating')
+    if [[ $floating != "true" ]]; then
+      dispatch "hl.dsp.window.float({ window = \"$w\", action = \"toggle\" })" togglefloating "$w"
+    fi
+    dispatch "hl.dsp.window.resize({ window = \"$w\", x = 1280, y = 800 })" resizewindowpixel "exact 1280 800,$w"
+    dispatch "hl.dsp.window.center({ window = \"$w\" })" centerwindow "$w"
+    break
+  fi
+  sleep 0.05
+done
+wait

@@ -84,6 +84,7 @@ Flickable {
     Column {
         id: col
 
+        visible: !!Store.data
         width: view.width
 
         Hero {
@@ -247,10 +248,11 @@ Flickable {
         }
     }
 
-    Txt {
+    // Flickable children live in its contentItem: place against the view, not the content.
+    FirstRun {
         visible: !Store.data
-        anchors.centerIn: parent
-        text: Store.verifyError !== "" ? "snapshot refused · " + Store.verifyError : Store.snapshotMissing ? "no snapshot found · run omarchy-plugin-check update" : "loading snapshot…"
-        color: Theme.muted
+        x: (view.width - width) / 2
+        y: Math.max(24, (view.height - height) / 2 - 40)
+        width: Math.min(560, view.width - 80)
     }
 }

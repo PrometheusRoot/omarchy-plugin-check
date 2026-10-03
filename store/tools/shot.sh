@@ -8,8 +8,8 @@ out=$(realpath -m "$1")
 wait=${2:-6}
 here=$(cd "$(dirname "$0")/.." && pwd)
 log=${out%.png}.log
-title="omarchy plugin store"
-"$here/bin/omarchy-plugin-store" "${@:3}" > "$log" 2>&1 &
+title="omarchy-store"
+"$here/bin/omarchy-store" "${@:3}" > "$log" 2>&1 &
 sleep "$wait"
 addr=$(hyprctl clients -j | jq -r --arg t "$title" '.[] | select(.title == $t) | .address' | head -1)
 if [[ -z $addr ]]; then

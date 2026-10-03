@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Fake `hyprctl` for the bats tests: `-j binds` prints $FAKE_BINDS (a JSON file) or fails like
+# hyprctl without a running Hyprland. Every call is recorded in $FAKE_LOG; nothing else exists.
+set -Eeuo pipefail
+printf 'hyprctl %s\n' "$*" >> "${FAKE_LOG:?}"
+if [[ "$*" == "-j binds" && -n ${FAKE_BINDS:-} ]]; then
+  cat -- "${FAKE_BINDS}"
+  exit 0
+fi
+echo "HYPRLAND_INSTANCE_SIGNATURE not set! (is hyprland running?)"
+exit 1

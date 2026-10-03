@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.prometheusroot.plugin-check",
-  "name": "Plugin Check",
-  "version": "0.1.0",
+  "id": "io.github.prometheusroot.omarchy-store",
+  "name": "omarchy-store",
+  "version": "0.2.0",
   "author": "PrometheusRoot",
-  "description": "Commit-bound safety verdicts for your installed Omarchy plugins: a bar shield tinted by the worst state and a panel listing each plugin's reviewed commit, from one signed snapshot checked locally.",
-  "homepage": "https://github.com/PrometheusRoot/omarchy-plugin-check",
+  "description": "An app store for Omarchy plugins with commit-bound safety verdicts: browse, install pinned to the reviewed commit, and a bar shield tinted by the worst state of what you run, from one signed snapshot checked locally. Independent community project, not affiliated with Omarchy.",
+  "homepage": "https://github.com/PrometheusRoot/omarchy-store",
   "kinds": ["panel", "bar-widget"],
   "entryPoints": {
     "panel": "Panel.qml",
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Plugin Check",
-    "description": "Shield tinted by the worst state of your installed plugins; click for the list.",
+    "displayName": "omarchy-store",
+    "description": "Shield tinted by the worst state of your installed plugins; click for the store, right click for the verdict list.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"

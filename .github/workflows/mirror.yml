@@ -1,0 +1,64 @@
+name: mirror
+
+# Publish the installable omarchy-store repository (ADR-0042) on a version tag: build the tree
+# with scripts/build-mirror.sh (checker plugin at the root, store app in store/, validated with
+# Omarchy's omarchy-plugin-validate), commit it on top of the mirror's master and tag it.
+# One-time setup: an ed25519 deploy key with write access on PrometheusRoot/omarchy-store; its
+# private half is this repository's secret MIRROR_DEPLOY_KEY.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MIRROR: git@github.com:PrometheusRoot/omarchy-store.git
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: The tag names the plugin version
+        run: |
+          version=$(jq -r .version plugin/manifest.json)
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "tag ${TAG} but plugin/manifest.json says ${version}" >&2
+            exit 1
+          fi
+
+      - name: Build and validate the tree
+        run: scripts/build-mirror.sh "${RUNNER_TEMP}/tree"
+
+      - name: Commit on the mirror and push master + tag
+        env:
+          MIRROR_DEPLOY_KEY: ${{ secrets.MIRROR_DEPLOY_KEY }}
+        run: |
+          if [ -z "${MIRROR_DEPLOY_KEY}" ]; then
+            echo "MIRROR_DEPLOY_KEY is not set; see the header of this workflow" >&2
+            exit 1
+          fi
+          key="${RUNNER_TEMP}/mirror_key"
+          hosts="${RUNNER_TEMP}/known_hosts"
+          install -m 600 /dev/null "${key}"
+          printf '%s\n' "${MIRROR_DEPLOY_KEY}" > "${key}"
+          # github.com's published ed25519 host key (docs.github.com, "GitHub's SSH key fingerprints")
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "${hosts}"
+          export GIT_SSH_COMMAND="ssh -i ${key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${hosts}"
+          git clone --branch master "${MIRROR}" "${RUNNER_TEMP}/mirror"
+          git -C "${RUNNER_TEMP}/mirror" config user.name "omarchy-store release"
+          git -C "${RUNNER_TEMP}/mirror" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/build-mirror.sh --commit "${RUNNER_TEMP}/mirror"
+          git -C "${RUNNER_TEMP}/mirror" tag -a "${TAG}" -m "omarchy-store ${TAG}"
+          git -C "${RUNNER_TEMP}/mirror" push origin master "refs/tags/${TAG}"
+          rm -f -- "${key}"

@@ -42,7 +42,7 @@ The project is split (ADR-0007, ADR-0026); this is the public tool:
 | `omarchy-plugin-check` | public | `spec/ aggregator/ collector/ schemas/ standards/` + site, plugin, store, docs |
 | `omarchy-plugin-check-scanner` | private | `scanner/ orchestrator/` (stages, rules, prompts, weights, fixtures) |
 | `omarchy-plugin-check-data` | public | our provider feed (`opc`), signed in its GitHub Actions |
-| `omarchy-plugin-check-plugin` | public | mirror of `plugin/` for `omarchy plugin add` |
+| `omarchy-store` | public | the installable tree (`omarchy plugin add …/omarchy-store --enable`): `plugin/` at the root + `store/`, built by `scripts/build-mirror.sh`, pushed by `mirror.yml` on a `v*` tag (ADR-0042); formerly `omarchy-plugin-check-plugin` |
 
 ## Static API (aggregator → Pages; spec/schemas/api-*.schema.json)
 
@@ -160,19 +160,24 @@ docs/RANKING.md.
 ## Store app (`store/`)
 
 A standalone Quickshell app (ADR-0014): its own process and floating window, never inside
-`omarchy-shell`. Reads the client bundle (ADR-0032): a signed manifest, the home slice, the
-search columns and lazily one aggregated view per plugin; no network per keystroke.
+`omarchy-shell`; shipped as `store/` of the omarchy-store repository and opened by the bar shield
+through `store/bin/omarchy-store` (single instance, ADR-0042). Reads the client bundle
+(ADR-0032): a signed manifest, the home slice, the search columns and lazily one aggregated view
+per plugin; no network per keystroke. With no usable bundle it runs the bundled checker's
+`update` first (`lib/firstrun.mjs`).
 
 ```
-qs -p store/ ── StoreWindow (GUI thread: layout + bindings only)
+bin/omarchy-store ── qs -n -p store/ ── StoreWindow (GUI thread: layout + bindings only)
                  ├─ Theme      ~/.local/state/omarchy/current/theme/colors.toml → tokens (lib/theme.mjs)
                  ├─ Store      bin/omarchy-plugin-store-verify (Process) → FileView(store-home.json)
+                 │               no bundle / refused → <checker> update → verify again (lib/firstrun.mjs)
                  │               → data.mjs fromHome (GUI thread) · after the first frame
                  │               FileView(store-search.json) ─► WorkerScript ui/worker.mjs
                  │               lib/service.mjs: data.mjs columns · search.mjs index · rank.mjs
                  │             ◄─ records for what is on screen; details: verifier → fromDetail
-                 ├─ Installer  omarchy-plugin-check --add --pin <repo> | pin --yes <id> (argv) · lib/install.mjs
-                 │               installed tab ← omarchy-plugin-check status --json (offline)
+                 ├─ Installer  <checker> --add --pin <repo> | pin --yes <id> (argv) · lib/install.mjs
+                 │               <checker> = ../bin/omarchy-plugin-check (absolute) · installed tab ← status --json
+                 ├─ Extras     <checker> setup [--uninstall] --plan --json → confirm dialog → --yes (lib/extras.mjs)
                  └─ ImageCache curl → ~/.cache/omarchy-plugin-check/img/ (https only, 4 at a time)
 ```
 
@@ -210,8 +215,9 @@ it may add findings and raise the outcome one level, never lower it, never reach
 
 ## Checker plugin (`plugin/`)
 
-The public mirror repo root (`omarchy plugin add`-able; `omarchy plugin validate` clean). One
-CLI, one panel, one bar widget; every decision is a pure jq filter or ES module (ADR-0033).
+The root of the installable omarchy-store repository (`omarchy plugin add`-able; `omarchy plugin
+validate` clean; plugin id `io.github.prometheusroot.omarchy-store`, ADR-0042). One CLI, one
+panel, one bar widget; every decision is a pure jq filter or ES module (ADR-0033).
 
 ```
 bin/omarchy-plugin-check (bash glue)                           ~/.cache/omarchy-plugin-check/
@@ -225,8 +231,11 @@ bin/omarchy-plugin-check (bash glue)                           ~/.cache/omarchy-
   status ─── plugin checkouts (id + origin + HEAD + tree) ─ lib/status.jq ─► status.json ─ lib/table.jq
   pin <id> ─ status entry ─ git fetch <listed repo> ─ lib/pin.jq (direction, files, verdict change)
              ─ confirm ─ checkout --detach + verify commit/tree ─ validate ─ rescanPlugins ─ CHANGES.md
-  setup ──── ~/.local/bin link · lib/menu.jq ─► extensions/omarchy-menu.jsonc (marked block)
-omarchy-shell: BarWidget.qml (shield, worst state) ──toggle──► Panel.qml (rows, rescan = status --json)
+  setup ──── facts (links, menu, hyprctl -j binds read-only) ─ lib/setup.jq plan (--plan --json)
+             ─ confirm / --yes ─ ~/.local/bin links · lib/menu.jq ─► extensions/omarchy-menu.jsonc
+             · lib/keybind.jq + lib/hypr.jq ─► ~/.config/hypr/bindings.lua (marked blocks, backups)
+omarchy-shell: BarWidget.qml (shield, worst state) ── left ──► store/bin/omarchy-store (execDetached)
+                                                    ── right ─► Panel.qml (rows, store, rescan = status --json)
                both read status.json through a watched FileView (no polling); logic in lib/panel.mjs
 ```
 
@@ -242,5 +251,6 @@ omarchy-shell: BarWidget.qml (shield, worst state) ──toggle──► Panel.q
 
 P3 protocol, aggregator, collector, signed snapshot (production: data repo, ADR-0039) ·
 P4 site (static Astro build, deployed daily from the published snapshot) · P5 checker plugin
-(CLI + panel + bar widget; mirror repo `omarchy-plugin-check-plugin`) · P5b store app (v1 UI + engine, done) ·
+(CLI + panel + bar widget) · P5b store app (v1 UI + engine, done) · P5c omarchy-store: one-command
+install of both (ADR-0042) ·
 P6 scheduling · P7 scale/search/dynamic. The scanner phases (P0–P2) live in the private repository.
