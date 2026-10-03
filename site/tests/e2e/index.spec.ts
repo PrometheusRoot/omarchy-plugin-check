@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 
 test('index: search, filter and open a report', async ({ page }) => {
   await page.goto('./');
+  await expect(page.locator('#installCmd')).toHaveText(
+    'omarchy plugin add https://github.com/PrometheusRoot/omarchy-store --enable',
+  );
   const rows = page.locator('#rows .pl');
   await expect(rows.first()).toBeVisible();
   await page.getByLabel('search plugins').fill('clickup');

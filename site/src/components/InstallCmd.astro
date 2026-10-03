@@ -1,0 +1,32 @@
+---
+// "get omarchy-store": the one-line install with a copy button and what you get (ADR-0042).
+import { GETS, INSTALL_CMD } from '../lib/install';
+import Icon from './Icon.astro';
+import Mark from './Mark.astro';
+---
+<section class="get card" aria-labelledby="get-h">
+  <div class="get-h">
+    <Mark class="mark" />
+    <h2 id="get-h">get omarchy-store</h2>
+    <span class="mute">one command · independent community project · not affiliated with omarchy</span>
+  </div>
+  <div class="cmd">
+    <code id="installCmd">{INSTALL_CMD}</code>
+    <button class="btn copy" type="button" data-copy="installCmd">
+      <Icon id="i-clip" size="s" /><span data-copy-label>copy</span><span class="sr"> the install command</span>
+    </button>
+  </div>
+  <ul class="gets">
+    {
+      GETS.map((g) => (
+        <li>
+          <Icon id={g.icon} size="s" />
+          <b>{g.title}</b> <span>{g.text}</span>
+        </li>
+      ))
+    }
+  </ul>
+</section>
+<script>
+  import '../client/copy';
+</script>
