@@ -30,7 +30,9 @@ startLine, endLine]}`, optional `quality{score}`, `policy{uri, digest}`, and the
 
 **Coarse by design.** Findings carry a category, a severity and file:line evidence, never a rule
 identifier, rule weight or score formula (`additionalProperties: false` rejects them). A provider
-that embeds `report` must make rule identifiers opaque first (ADR-0011).
+that embeds `report` must make rule identifiers opaque first (ADR-0011): not reversible by anyone
+without a provider-held secret, so no public salt and no unkeyed hash of the id or of anything
+derived from it (ours: HMAC-SHA256 under a provider-only key, `r.`/`F-` + 12 hex, ADR-0037).
 
 ## 2. Signing
 
