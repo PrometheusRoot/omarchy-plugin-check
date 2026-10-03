@@ -31,9 +31,10 @@ def tilde($home): if startswith($home + "/") then "~" + ltrimstr($home) else . e
           else {what: "keybind", action: "keep", path: .path, text: "keybind: none of ours in \($p)"} end
         elif $mode == "remove" then {what: "keybind", action: "remove", path: .path, text: "keybind \(.current) → omarchy-store: remove from \($p) (backup kept)"}
         else {what: "keybind", action: "edit", path: .path,
-          text: "keybind \(.key) → omarchy-store in \($p) (backup kept)"
+          # why: jq 1.7 takes only a term as an object value, so the sum is parenthesized
+          text: ("keybind \(.key) → omarchy-store in \($p) (backup kept)"
             + (if $taken != "" then "; \($taken)" else "" end)
-            + (if .checked then "" else "; Hyprland not running, conflicts not checked" end)} end)
+            + (if .checked then "" else "; Hyprland not running, conflicts not checked" end))} end)
   ] as $changes
 | {mode: $mode, pending: ($changes | any(.action | IN("keep", "skip") | not)),
    keybind: (if .keybind.current != "" then .keybind.current else .keybind.key // "" end), changes: $changes}
