@@ -22,10 +22,21 @@ verdict — the protocol, the signatures, the merge — is open here.
 | `aggregator/` | `opc-aggregate`: verify feeds (Sigstore), merge verdicts, publish `api/v1/` + signed `store.json` |
 | `collector/` | `opc-collect`: marketplace sync, GitHub activity, engagement, [ranking](docs/RANKING.md) |
 | `site/` | Website (Astro, static): index, per-plugin reports, providers, static API under `api/v1/` ([README](site/README.md)) |
-| `store/` | Native app store: standalone Quickshell app over one signed snapshot ([README](store/README.md)) |
-| `plugin/` | `omarchy-plugin-check`: CLI, menu, QML panel and bar widget, install gate ([README](plugin/README.md)) |
+| `store/` | omarchy-store app: standalone Quickshell app over one signed snapshot ([README](store/README.md)) |
+| `plugin/` | the checker: CLI, menu, QML panel and bar widget, install gate; with `store/` it is the installable [omarchy-store](https://github.com/PrometheusRoot/omarchy-store) ([README](plugin/README.md)) |
 | `standards/` | Shared lint/type/hook configs and tool pins |
 | `docs/` | [ARCHITECTURE](docs/ARCHITECTURE.md) · [VERDICT-LOGIC](docs/VERDICT-LOGIC.md) · [THREAT-MODEL](docs/THREAT-MODEL.md) · [REPORT-DIMENSIONS](docs/REPORT-DIMENSIONS.md) · [RANKING](docs/RANKING.md) · [ENGINEERING](docs/ENGINEERING.md) · [decisions](docs/decisions/README.md) |
+
+## Install omarchy-store
+
+```sh
+omarchy plugin add https://github.com/PrometheusRoot/omarchy-store --enable
+```
+
+One command: the store, the bar shield and the checker. Click the shield; the first run fetches
+and verifies the signed snapshot. Menu entry, keybind and terminal commands are optional, from the
+store's status tab ([plugin/README](plugin/README.md), ADR-0042). Independent community project,
+not affiliated with Omarchy.
 
 ## Develop
 
@@ -38,7 +49,7 @@ AI agents: [CLAUDE.md](CLAUDE.md).
 |---|---|---|
 | P3 | Provider protocol, aggregator, collector, signed snapshot | done locally; data repo + Pages next |
 | P4 | Astro static site | built; Pages deploy pending a published snapshot |
-| P5 | `omarchy-plugin-check` plugin (CLI, menu, QML panel, install gate), store app | done; mirror repo pending |
+| P5 | `omarchy-plugin-check` plugin (CLI, menu, QML panel, install gate), store app; one-command omarchy-store | done |
 | P6 | Scheduling | planned |
 | P7 | Scale to all plugins, search, activity tracking, dynamic detonation | future |
 

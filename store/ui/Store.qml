@@ -6,12 +6,15 @@ import QtQml.WorkerScript
 import Quickshell
 import Quickshell.Io
 import "../lib/data.mjs" as Data
+import "../lib/firstrun.mjs" as FR
 
 // App state + the data worker over the client bundle (ADR-0032). Start: verify the bundle
 // (bin/omarchy-plugin-store-verify: manifest signature, expiry, rollback, sha256 of every
 // file) -> map the small home slice here for the first frame (lib/data.mjs fromHome) ->
 // after the first frame hand the search columns to ui/worker.mjs, which maps, indexes and
-// searches (ADR-0031). Detail documents are verified and loaded lazily per plugin.
+// searches (ADR-0031). Detail documents are verified and loaded lazily per plugin. No bundle
+// yet, or one that no longer verifies: the bundled checker's `update` runs once first
+// (lib/firstrun.mjs, ADR-0042), with a progress state and a retry on failure.
 Singleton {
     id: store
 
@@ -27,14 +30,17 @@ Singleton {
     property bool wantSnapshot: false
     property bool usingDev: dev
     property bool snapshotMissing: false
-    property string verifyError: "" // non-empty: the bundle failed verification and is not used
+    property string verifyError: "" // non-empty: the search file failed verification and is not used
+    // First run / refresh state machine (lib/firstrun.mjs) and what the home tab shows for it.
+    property var fr: FR.start({
+        dev: dev,
+        autoUpdate: !Quickshell.env("OPC_STORE_BUNDLE")
+    })
+    readonly property var frView: FR.view(fr)
     property var homeShelves: ({}) // raw shelf ids from the home slice (worker: "similar")
     // Launch time from the launcher (true cold start), else QML load.
     readonly property bool launched: Number(Quickshell.env("OPC_STORE_T0")) > 0
     readonly property real startedAt: Number(Quickshell.env("OPC_STORE_T0")) || Date.now()
-    Component.onCompleted: timings = Object.assign({}, timings, {
-        storeAt: Date.now() - startedAt
-    })
 
     // --- data -------------------------------------------------------------------------
     property var data: null // home payload (lib/data.mjs fromHome)
@@ -322,6 +328,11 @@ Singleton {
     function closeDialog() {
         if (dialog === "install")
             Installer.close();
+        if (dialog === "extras") {
+            if (Extras.state === "running")
+                return;
+            Extras.close();
+        }
         dialog = "";
     }
 
@@ -446,12 +457,62 @@ Singleton {
             Qt.callLater(() => store.wantSnapshot = true);
     }
 
+    // First run / refresh: one event in, then start whatever the new state needs.
+    function frStep(ev) {
+        const prev = fr.state;
+        fr = FR.reduce(fr, ev);
+        if (fr.state === prev && ev.type !== "retry")
+            return;
+        if (fr.state === "verifying") {
+            verify.running = true;
+        } else if (fr.state === "updating") {
+            const argv = FR.updateArgv(Installer.bin);
+            if (argv) {
+                updater.command = argv;
+                updater.running = true;
+            } else {
+                frStep({
+                    type: "updated",
+                    code: 1,
+                    err: "no checker next to the store"
+                });
+            }
+        } else if (fr.state === "failed") {
+            console.warn("store: no catalog:", frView.title, "·", frView.detail);
+        }
+    }
+
+    function retry() {
+        frStep({
+            type: "retry"
+        });
+    }
+
+    Component.onCompleted: {
+        timings = Object.assign({}, timings, {
+            storeAt: Date.now() - startedAt
+        });
+        if (!dev)
+            verify.running = true;
+    }
+
+    Connections {
+        target: Installer
+
+        function onProbedChanged() {
+            if (Installer.probed)
+                store.frStep({
+                    type: "checker",
+                    found: Installer.checker
+                });
+        }
+    }
+
     // 1. verify the manifest + the home slice (real bundle only; the dev data ships with the
     // app). Exit 3 = no bundle here. The search columns are verified in step 3.
     Process {
         id: verify
 
-        running: !store.usingDev
         command: [store.verifier, "bundle", store.realBundle, "home"]
         stderr: StdioCollector {
             id: verifyErr
@@ -461,16 +522,41 @@ Singleton {
                 verify: Date.now() - store.startedAt
             });
             if (code === 0) {
-                homeFile.path = store.snapshotPath + "/store-home.json";
-            } else if (code === 3) {
-                // No published bundle on this machine yet: the bundled dev data, flagged "dev".
-                store.usingDev = true;
-                store.snapshotPath = store.devBundle;
-                homeFile.path = store.devBundle + "/store-home.json";
+                const path = store.snapshotPath + "/store-home.json";
+                if (homeFile.path === path)
+                    homeFile.reload();
+                else
+                    homeFile.path = path;
             } else {
-                store.verifyError = verifyErr.text.trim() || "verification failed";
-                console.warn("store: refusing the snapshot:", store.verifyError);
+                console.warn("store: bundle not usable:", verifyErr.text.trim());
             }
+            store.frStep({
+                type: "verified",
+                code: code,
+                err: verifyErr.text
+            });
+        }
+    }
+
+    // 1b. no bundle, or one that no longer verifies: the bundled checker fetches and verifies
+    // the signed snapshot (production key shipped in keys/), then step 1 runs again.
+    Process {
+        id: updater
+
+        stdout: StdioCollector {
+            id: updateOut
+        }
+        stderr: StdioCollector {
+            id: updateErr
+        }
+        onExited: code => {
+            if (code === 0)
+                Installer.refresh();
+            store.frStep({
+                type: "updated",
+                code: code,
+                err: updateOut.text + "\n" + updateErr.text
+            });
         }
     }
 

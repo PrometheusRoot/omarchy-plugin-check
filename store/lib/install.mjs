@@ -9,6 +9,34 @@
 //   any --close/cancel--> idle
 
 export var CHECKER = "omarchy-plugin-check";
+var BIN_RE = /^\/[A-Za-z0-9_./-]+$/;
+
+// Where the checker CLI sits relative to the store (Quickshell.shellDir): the omarchy-store
+// repository ships it at bin/ next to store/ (ADR-0042); this repository at plugin/bin/.
+export function checkerCandidates(shellDir) {
+  var d = String(shellDir || "").replace(/^file:\/\//, "").replace(/\/+$/, "");
+  var up = d.replace(/\/[^/]+$/, "");
+  if (!BIN_RE.test(d) || up === "") return [];
+  return [up + "/bin/" + CHECKER, up + "/plugin/bin/" + CHECKER];
+}
+
+// The checker the store runs: an absolute path the probe printed (first executable candidate,
+// else `command -v`), or "" when there is none.
+export function checkerPath(probeOutput) {
+  var p = String(probeOutput || "").trim().split("\n")[0] || "";
+  return BIN_RE.test(p) && p.indexOf("/../") < 0 && /\/omarchy-plugin-check$/.test(p) ? p : "";
+}
+
+// The probe: print the first executable candidate (argv, never shell text), else PATH's.
+export function probeArgv(candidates) {
+  var c = (candidates || []).filter(function (x) { return BIN_RE.test(x); });
+  return ["sh", "-c", 'for c in "$@"; do if [ -x "$c" ]; then printf "%s\\n" "$c"; exit 0; fi; done; command -v ' + CHECKER, "sh"].concat(c);
+}
+
+function bin(b) {
+  return typeof b === "string" && BIN_RE.test(b) ? b : CHECKER;
+}
+
 export var REPO_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?(\.git)?$/;
 
 export function steps(p) {
@@ -25,21 +53,21 @@ export function steps(p) {
 
 // argv only, never a shell string. A repo that is not a plain GitHub URL is refused so a
 // snapshot value can never turn into a checker flag (e.g. "--force").
-export function command(p) {
+export function command(p, checker) {
   if (!p || !REPO_RE.test(String(p.repo || ""))) return null;
   // why: the store has already shown its own confirm dialog and has no terminal for the
   // checker's prompt, so it passes --yes; --enable matches the "enable" step above (ADR-0033).
   // Blocked plugins are still refused by the checker: --yes never overrides a refusal.
-  return [CHECKER, "--add", "--pin", "--yes", "--enable", String(p.repo)];
+  return [bin(checker), "--add", "--pin", "--yes", "--enable", String(p.repo)];
 }
 
 // Re-pin an installed plugin to its reviewed commit (update or roll back, ADR-0035). The id
 // must be a plain plugin id so it can never become a checker flag.
 export var ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-export function pinCommand(p) {
+export function pinCommand(p, checker) {
   if (!p || !ID_RE.test(String(p.id || "")) || String(p.id).indexOf("..") !== -1) return null;
   // why: like command(): the store already confirmed in its own dialog and has no terminal.
-  return [CHECKER, "pin", "--yes", String(p.id)];
+  return [bin(checker), "pin", "--yes", String(p.id)];
 }
 
 export function pinSteps(p) {

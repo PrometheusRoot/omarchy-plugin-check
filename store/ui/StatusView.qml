@@ -1,10 +1,12 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import "../lib/format.mjs" as F
 
-// Status tab (mockup renderStatus): snapshot, image cache, providers, performance (measured
-// in this session), appearance, keys.
+// Status tab (mockup renderStatus): extras (menu entry, keybind, terminal commands; opt-in,
+// ADR-0042), about, snapshot, image cache, providers, performance (measured in this session),
+// appearance, keys.
 Flickable {
     id: view
 
@@ -28,8 +30,11 @@ Flickable {
     function activate() {
     }
 
-    Component.onCompleted: if (!Store.bench && Store.indexed)
-        Store.runBench()
+    Component.onCompleted: {
+        Extras.refresh();
+        if (!Store.bench && Store.indexed)
+            Store.runBench();
+    }
 
     Connections {
         target: Store
@@ -47,6 +52,81 @@ Flickable {
         y: 16
         columns: 3
         spacing: 12
+
+        Box {
+            id: extrasBox
+
+            readonly property var ex: Extras.summary
+
+            width: view.colW
+            title: "extras"
+            icon: "keys"
+            note: "optional"
+
+            KV {
+                keyWidth: 70
+                pairs: [["menu", extrasBox.ex.menu ? "Install › Plugin Store ✓" : "—", extrasBox.ex.menu ? "green" : "muted"], ["keybind", extrasBox.ex.keybind !== "" ? extrasBox.ex.keybind + " ✓" : "—", extrasBox.ex.keybind !== "" ? "green" : "muted"], ["terminal", extrasBox.ex.command ? "omarchy-store · omarchy-plugin-check ✓" : "—", extrasBox.ex.command ? "green" : "muted"]]
+            }
+
+            Txt {
+                width: parent.width
+                text: Extras.available ? "Lists every change and asks first; files are backed up and undo removes only what was added." : Installer.probed ? "needs the bundled checker (bin/omarchy-plugin-check)" : "…"
+                size: 10
+                color: Theme.muted
+                wrapMode: Text.Wrap
+            }
+
+            Row {
+                spacing: 6
+
+                Btn {
+                    sm: true
+                    kind: extrasBox.ex.all ? "" : "primary"
+                    icon: "keys"
+                    label: extrasBox.ex.all ? "all added" : "add menu + keybind + terminal command"
+                    key: extrasBox.ex.all ? "" : "e"
+                    enabledState: Extras.available && !extrasBox.ex.all
+                    onClicked: Extras.open(false)
+                }
+
+                Btn {
+                    visible: extrasBox.ex.menu || extrasBox.ex.keybind !== "" || extrasBox.ex.command
+                    sm: true
+                    kind: "ghost"
+                    icon: "rollback"
+                    label: "undo"
+                    enabledState: Extras.available
+                    onClicked: Extras.open(true)
+                }
+            }
+        }
+
+        Box {
+            width: view.colW
+            title: "about"
+            icon: "info"
+
+            Txt {
+                width: parent.width
+                text: "omarchy-store · independent community project · not affiliated with Omarchy"
+                size: 11
+                weight: Font.Medium
+                wrapMode: Text.Wrap
+            }
+
+            KV {
+                keyWidth: 70
+                pairs: [["store", Quickshell.shellDir.replace(Store.home, "~")], ["checker", Installer.bin !== "" ? Installer.bin.replace(Store.home, "~") : "not found"], ["source", "github.com/PrometheusRoot/omarchy-plugin-check"]]
+            }
+
+            Txt {
+                width: parent.width
+                text: "Verdicts are opinions about one commit, not guarantees. Plugins run unsandboxed inside omarchy-shell."
+                size: 10
+                color: Theme.muted
+                wrapMode: Text.Wrap
+            }
+        }
 
         Box {
             width: view.colW
@@ -176,7 +256,7 @@ Flickable {
             icon: "keys"
 
             Repeater {
-                model: [["/", "focus search"], ["1–5", "tabs"], ["j k ↑ ↓ ← →", "move focus"], ["⏎", "open"], ["esc", "back / close"], ["i", "install focused"], ["h l", "hero slide"], ["?", "ranking explainer"], ["t", "theme (dev)"], ["o s x d a", "detail sections"]]
+                model: [["/", "focus search"], ["1–5", "tabs"], ["j k ↑ ↓ ← →", "move focus"], ["⏎", "open"], ["esc", "back / close"], ["i", "install focused"], ["h l", "hero slide"], ["?", "ranking explainer"], ["t", "theme (dev)"], ["o s x d a", "detail sections"], ["e", "extras (status tab)"]]
 
                 Row {
                     id: keyRow

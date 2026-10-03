@@ -17,7 +17,10 @@ set -euo pipefail
 # why: this runs on every cold start; parameter expansion instead of dirname/cd subshells.
 self=$(readlink -f "$0")
 here=${self%/*}
+# Keys: spec/keys in this repository; keys/ at the root of the omarchy-store repository, where
+# the store sits in store/ next to the checker (ADR-0042).
 keys="$here/../../spec/keys"
+[[ -d $keys ]] || keys="$here/../../keys"
 [[ -d $keys ]] || keys="$here/../keys"
 ns=omarchy-plugin-check-snapshot
 principal=omarchy-plugin-check

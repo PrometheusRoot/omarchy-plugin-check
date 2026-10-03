@@ -33,7 +33,7 @@ lint:
 fmt:
     for p in {{public}}; do (cd "$p" && ruff format . && ruff check --fix .); done
     ruff format scripts && ruff check --fix scripts
-    shfmt -w -i 2 -ci -bn -sr scripts/*.sh spec/*.sh store/tools/*.sh store/bin/*
+    shfmt -w -i 2 -ci -bn -sr scripts/*.sh spec/*.sh store/tools/*.sh store/bin/* store/tests/*.bats store/tests/bin/*
     shfmt -w -i 2 -ci -bn -sr plugin/bin/* plugin/tools/*.sh plugin/tests/*.bats plugin/tests/*.bash plugin/tests/bin/*
 
 # basedpyright strict, no baseline (every public package)
@@ -60,9 +60,10 @@ tools:
 snapshot *args:
     scripts/build-snapshot.sh "$@"
 
-# Store app (store/): node tests incl. the search latency benchmark over the dev search columns
+# Store app (store/): node tests incl. the search latency benchmark over the dev search columns + launcher bats
 store-test:
     node --test 'store/lib/*.test.mjs'
+    bats store/tests
 
 # Store app: qmllint + qmlformat check + qmldir freshness (`store/tools/qmllint.sh --fix` formats)
 store-lint:
@@ -71,7 +72,11 @@ store-lint:
 # Run the store app floating at 1280x800; `just store-run --dev` = fake installer, sample installed list, `t` themes
 store-run *args:
     for f in store-home store-search; do test -f store/dev/$f.json || gunzip -k store/dev/$f.json.gz; done
-    store/bin/omarchy-plugin-store "$@"
+    store/bin/omarchy-store "$@"
+
+# Build the omarchy-store repository tree (plugin at the root, store in store/) into OUT and validate it (ADR-0042)
+mirror out *args:
+    scripts/build-mirror.sh "$@"
 
 # Refresh the store's bundled dev data from a snapshot build dir (`just snapshot --out DIR`)
 store-dev-bundle dir:

@@ -1,6 +1,9 @@
-# store — native Omarchy plugin app store
+# store — omarchy-store, the native Omarchy plugin app store
 
-A standalone Quickshell app (its own process and floating 1280×800 window, ADR-0014) over the
+Ships inside the installable `PrometheusRoot/omarchy-store` repository as `store/`, next to the
+checker plugin (ADR-0042): the bar shield opens it, the first run fetches and verifies the
+snapshot through the bundled checker. A standalone Quickshell app (its own process and floating
+1280×800 window, ADR-0014) over the
 signed client bundle of a snapshot (ADR-0032) plus an image cache. Approved design: the store mockup (tabs home /
 search / browse / installed / status, hero carousel, shelves, detail sections, install
 dialogs, ranking explainer). All-mono JetBrainsMono Nerd Font, zero radius, 1px borders,
@@ -9,7 +12,7 @@ colours from the current Omarchy theme.
 ## Run
 
 ```
-just store-run              # bin/omarchy-plugin-store: qs -p store/, then float + size + center
+just store-run              # bin/omarchy-store: qs -n -p store/, then float + size + center; focuses an open one
 just store-run --dev        # fake install runner, sample installed list, `t` cycles themes
 qs -p store/                # plain Quickshell; Hyprland may tile the window
 ```
@@ -18,15 +21,26 @@ Bundle: `$OPC_STORE_BUNDLE` (a directory), else `~/.cache/omarchy-plugin-check/`
 `store.json`): `store-manifest.json(.sig)`, `store-home.json`, `store-search.json`,
 `store-details.json`, `api/v1/plugins/`. `bin/omarchy-plugin-store-verify` checks the manifest
 signature, kind, expiry and rollback and every file's sha256 before the app parses it (home
-first, search columns after the first frame, each detail document when opened); a failure
-refuses the bundle and the home tab says why. The DEV key is accepted only with `--dev` or
-`OPC_STORE_DEV_KEYS=1`. Without any bundle the app uses the bundled dev data (`dev/`, a real
-snapshot's bundle, gzipped, unpacked on first run, not verified; header chip says "dev").
-Keybind suggestion: `super+shift+P` → `omarchy-plugin-store`.
+first, search columns after the first frame, each detail document when opened). Keys:
+`spec/keys/` here, `keys/` at the omarchy-store root. The DEV key is accepted only with `--dev` or
+`OPC_STORE_DEV_KEYS=1`.
 
-Install runs `omarchy-plugin-check --add --pin <repo>` (argv, GitHub URLs only). Without the
-checker on `PATH`, install is disabled with "checker not installed"; blocked plugins are always
-refused. Remove runs `omarchy-plugin-remove <id> --yes` after a confirm.
+First run (`lib/firstrun.mjs`): no bundle, or one that no longer verifies (expired, rolled back,
+damaged) → the bundled checker's `update` runs once ("getting the plugin catalog…", a moving bar)
+→ verify again → home. A failure shows a title, one line and *retry*; never a stack trace. With
+`OPC_STORE_BUNDLE` set nothing is fetched. `--dev` uses the bundled dev data (`dev/`, a real
+snapshot's bundle, gzipped, unpacked on first run, not verified; header chip says "dev"; not
+shipped in omarchy-store).
+
+The checker is run by absolute path: `../bin/omarchy-plugin-check` (omarchy-store layout), else
+`../plugin/bin/omarchy-plugin-check` (this repository), else `PATH` (`lib/install.mjs`). Install
+runs `<checker> --add --pin <repo>` (argv, GitHub URLs only). Without a checker, install is
+disabled with "checker not installed"; blocked plugins are always refused. Remove runs
+`omarchy-plugin-remove <id> --yes` after a confirm.
+
+Extras (status tab, `e`; `lib/extras.mjs`, `ui/Extras.qml`): `<checker> setup --plan --json` fills
+a confirm dialog with exactly the changes (`~/.local/bin` links, Omarchy menu entries, a free
+store keybind); *apply* runs `setup --yes --json`, *undo* `setup --uninstall` the same way.
 
 The installed tab reads `omarchy-plugin-check status --json` (offline) when the checker is
 installed: the listed id (also for a checkout at a former repository name, shown as *moved*),
@@ -40,17 +54,17 @@ to `git rev-parse HEAD` per plugin directory.
 
 `/` search · `1`–`5` tabs · `j k ↑ ↓ ← →` move · `⏎` open · `esc` back/close · `i` install
 focused · `h l` hero slide · `?` ranking explainer · `t` theme (dev) · detail: `o s x d a`
-sections · dialogs: `y` confirm. The map is `lib/nav.mjs` (tested).
+sections · status: `e` extras · dialogs: `y` confirm. The map is `lib/nav.mjs` (tested).
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `shell.qml` | entry: `ShellRoot { StoreWindow {} }` |
-| `ui/` | QML: layout and bindings only. Singletons `Theme`, `Store`, `Installer`, `ImageCache`; `worker.mjs` (WorkerScript) |
-| `bin/` | `omarchy-plugin-store` launcher; `omarchy-plugin-store-verify` (bundle + detail verification, ADR-0032) |
-| `lib/*.mjs` | pure logic, no Qt types (ADR-0031): `search` index + per-keystroke search over columns, `data` bundle adapter (the only file that knows snapshot fields), `rank`, `install` state machine + argv, `nav` key map + grid cursor, `theme` colors.toml → tokens, `format`, `imgcache`, `service` (worker protocol) |
-| `lib/*.test.mjs` | `node --test 'store/lib/*.test.mjs'` (`just store-test`), incl. the search latency benchmark |
+| `ui/` | QML: layout and bindings only. Singletons `Theme`, `Store`, `Installer`, `Extras`, `ImageCache`; `worker.mjs` (WorkerScript) |
+| `bin/` | `omarchy-store` launcher (single instance); `omarchy-plugin-store-verify` (bundle + detail verification, ADR-0032) |
+| `lib/*.mjs` | pure logic, no Qt types (ADR-0031): `search` index + per-keystroke search over columns, `data` bundle adapter (the only file that knows snapshot fields), `rank`, `install` state machine + argv + checker path, `firstrun` first-run state machine, `extras` setup plan + flow, `nav` key map + grid cursor, `theme` colors.toml → tokens, `format`, `imgcache`, `service` (worker protocol) |
+| `lib/*.test.mjs`, `tests/` | `node --test 'store/lib/*.test.mjs'` incl. the search latency benchmark, and `bats store/tests` (launcher, fake `hyprctl` + `qs`): `just store-test` |
 | `SNAPSHOT-FIELDS.md` | every bundle field the UI reads |
 | `dev/` | bundled dev data: the client bundle of a real DEV snapshot (4,777 plugins, 3 reviewed, real GitHub + marketplace stats) and the reviewed plugins' detail documents (`just store-dev-bundle DIR`) |
 | `tools/` | `dev-bundle.sh`, `qmllint.sh` (`just store-lint`), `gen-qmldir.sh`, `coldstart.sh [--bench]`, `shot.sh` |

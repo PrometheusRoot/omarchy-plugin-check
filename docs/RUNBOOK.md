@@ -52,3 +52,17 @@ spec/verify-snapshot.sh store.json store.json.sig spec/keys/allowed_signers
 
 The site (`site.yml`) builds daily from `vars.OPC_SNAPSHOT_URL` =
 `https://github.com/PrometheusRoot/omarchy-plugin-check-data/releases/latest/download/snapshot.tar.gz`.
+
+## Release omarchy-store (ADR-0042)
+
+Bump `version` in `plugin/manifest.json` (and `VERSION` in `plugin/bin/omarchy-plugin-check`),
+merge, then tag the merge commit `vX.Y.Z` and push the tag: `mirror.yml` builds the tree with
+`scripts/build-mirror.sh`, validates it with `omarchy-plugin-validate`, commits it on top of
+`PrometheusRoot/omarchy-store` master and pushes master + the tag (secret `MIRROR_DEPLOY_KEY`:
+an ed25519 deploy key with write access on the mirror). By hand, with push access:
+
+```
+git clone git@github.com:PrometheusRoot/omarchy-store.git /tmp/omarchy-store
+scripts/build-mirror.sh --ref vX.Y.Z --commit /tmp/omarchy-store
+git -C /tmp/omarchy-store tag -a vX.Y.Z -m "omarchy-store vX.Y.Z" && git -C /tmp/omarchy-store push origin master vX.Y.Z
+```

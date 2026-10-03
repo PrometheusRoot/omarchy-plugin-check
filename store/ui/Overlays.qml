@@ -22,6 +22,10 @@ Item {
                 Store.closeDialog();
         } else if (Store.dialog === "remove") {
             confirmAction();
+        } else if (Store.dialog === "extras" && Extras.state === "confirm") {
+            Extras.confirm();
+        } else if (Store.dialog === "extras" && Extras.state === "running") {
+            return;
         } else {
             Store.closeDialog();
         }
@@ -33,7 +37,8 @@ Item {
         else if (Store.dialog === "remove") {
             Installer.remove(r);
             Store.closeDialog();
-        }
+        } else if (Store.dialog === "extras" && Extras.state === "confirm")
+            Extras.confirm();
     }
 
     Rectangle {
@@ -43,7 +48,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: if (ov.st !== "running")
+            onClicked: if (ov.st !== "running" && Extras.state !== "running")
                 Store.closeDialog()
         }
 
@@ -308,6 +313,74 @@ Item {
                     label: "remove"
                     key: "y"
                     focused: true
+                    onClicked: ov.confirmAction()
+                }
+            ]
+        }
+
+        // ---- extras: menu entry + keybind + terminal commands (ADR-0042) ------------------
+        Dialog {
+            anchors.centerIn: parent
+            visible: Store.dialog === "extras"
+            width: 620
+            glyph: Extras.flow.undo ? "rollback" : "keys"
+            title: Extras.state === "done" ? (Extras.flow.undo ? "extras removed" : "extras added") : Extras.state === "failed" ? "nothing more was changed" : Extras.flow.undo ? "undo the extras?" : "add menu, keybind and terminal command?"
+            footNote: Extras.state === "running" ? "running omarchy-plugin-check setup" + (Extras.flow.undo ? " --uninstall" : "") + "…" : "omarchy-plugin-check setup" + (Extras.flow.undo ? " --uninstall" : "") + " · edited files are backed up first"
+
+            Txt {
+                width: parent.width
+                text: Extras.state === "planning" ? "working out what would change…" : Extras.state === "nothing" ? (Extras.flow.undo ? "Nothing of ours is in place; nothing to undo." : "Everything is already in place.") : Extras.state === "done" ? (Extras.flow.undo ? "Removed. Backups of the edited files stay next to them." : "Done. Hyprland reloads the keybind by itself; the menu picks up its entry on the next open.") : Extras.state === "failed" ? "setup stopped: " + (Extras.flow.log.length ? Extras.flow.log[Extras.flow.log.length - 1] : "see the terminal command for details") : "Exactly these changes, nothing else:"
+                color: Extras.state === "failed" ? Theme.yellow : Theme.textSecondary
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+            }
+
+            Repeater {
+                model: Extras.flow.plan ? Extras.flow.plan.changes : []
+
+                Row {
+                    id: change
+
+                    required property var modelData
+
+                    spacing: 8
+                    opacity: modelData.action === "keep" || modelData.action === "skip" ? 0.55 : 1
+
+                    Txt {
+                        width: 14
+                        text: change.modelData.sign
+                        color: change.modelData.action === "remove" ? Theme.red : change.modelData.action === "keep" || change.modelData.action === "skip" ? Theme.muted : Theme.green
+                        weight: Font.DemiBold
+                    }
+
+                    Txt {
+                        width: 560
+                        text: change.modelData.text
+                        size: 11
+                        color: Theme.text
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideNone
+                    }
+                }
+            }
+
+            buttons: [
+                Btn {
+                    kind: "ghost"
+                    label: Extras.state === "confirm" ? "cancel" : "close"
+                    key: "esc"
+                    enabledState: Extras.state !== "running"
+                    focused: Extras.state !== "confirm"
+                    onClicked: Store.closeDialog()
+                },
+                Btn {
+                    visible: Extras.state === "confirm" || Extras.state === "running"
+                    kind: Extras.flow.undo ? "danger" : "primary"
+                    icon: Extras.flow.undo ? "rollback" : "check"
+                    label: Extras.state === "running" ? "applying…" : Extras.flow.undo ? "undo" : "apply"
+                    key: "y"
+                    focused: Extras.state === "confirm"
+                    enabledState: Extras.state === "confirm"
                     onClicked: ov.confirmAction()
                 }
             ]

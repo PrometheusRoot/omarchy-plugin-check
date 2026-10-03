@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fake `qs` for the launcher tests: records argv and OPC_STORE_DEV, then "maps" a floating-less
+# window titled omarchy-store, as Quickshell would.
+set -euo pipefail
+printf 'qs %s dev=%s\n' "$*" "${OPC_STORE_DEV:-}" >> "${FAKE_LOG:?}"
+echo '[{"address": "0xabc", "title": "omarchy-store", "floating": false}]' > "${FAKE_CLIENTS:?}"

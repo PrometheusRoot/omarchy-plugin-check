@@ -8,6 +8,8 @@ Chip 1.0 Chip.qml
 CritChips 1.0 CritChips.qml
 DetailView 1.0 DetailView.qml
 Dialog 1.0 Dialog.qml
+singleton Extras 1.0 Extras.qml
+FirstRun 1.0 FirstRun.qml
 Footer 1.0 Footer.qml
 Glyph 1.0 Glyph.qml
 Header 1.0 Header.qml

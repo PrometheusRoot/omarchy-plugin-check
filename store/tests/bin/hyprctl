@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fake `hyprctl` for the launcher tests: `clients -j` prints $FAKE_CLIENTS (once the fake qs
+# has "mapped" the window), every dispatch is recorded in $FAKE_LOG.
+set -euo pipefail
+printf 'hyprctl %s\n' "$*" >> "${FAKE_LOG:?}"
+case "$*" in
+  "clients -j") if [[ -s ${FAKE_CLIENTS:?} ]]; then cat -- "${FAKE_CLIENTS}"; else echo "[]"; fi ;;
+  dispatch\ *) exit 0 ;;
+  *) exit 1 ;;
+esac

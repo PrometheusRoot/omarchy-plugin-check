@@ -56,6 +56,7 @@ export function keyAction(key, ctx) {
   if (key === "?") return { action: "rank" };
   if (key === "t") return ctx.dev ? { action: "theme" } : { action: "none" };
   if (ctx.tab === "detail" && SECTIONS[key]) return { action: "section", arg: SECTIONS[key] };
+  if (ctx.tab === "status" && key === "e") return { action: "extras" };
   return { action: "none" };
 }
 

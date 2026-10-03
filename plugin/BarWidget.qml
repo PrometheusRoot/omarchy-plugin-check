@@ -9,8 +9,9 @@ import "lib/panel.mjs" as P
 
 // Bar shield (mockup "bar · BarWidget.qml"): tinted by the worst state of the installed
 // plugins, with how many share it (no number when all are safe). Reads the cached
-// status.json through a watched FileView: no timer, no polling. Left click toggles the
-// panel; right click rescans once (`omarchy-plugin-check status --json`).
+// status.json through a watched FileView: no timer, no polling. Left click opens the
+// omarchy-store window (single instance: a second click focuses it, ADR-0042), right click
+// toggles the verdict panel, middle click rescans once (`omarchy-plugin-check status --json`).
 BarWidget {
     id: root
 
@@ -19,6 +20,7 @@ BarWidget {
 
     readonly property string home: Quickshell.env("HOME")
     readonly property string bin: P.cliPath(Qt.resolvedUrl("."))
+    readonly property var storeArgv: P.storeArgv(Qt.resolvedUrl("."))
     readonly property var worst: P.worst(status)
     // why: the host injects `bar` as a plain QtObject; qmllint cannot see its members.
     readonly property var host: bar
@@ -71,8 +73,10 @@ BarWidget {
         foreground: root.worst.state === null ? Qt.alpha(root.barFg, 0.6) : P.tint(root.pal, P.COLOR[root.worst.state])
         tooltipText: P.shieldTip(root.worst, root.status)
         onPressed: function (b) {
-            if (b === Qt.RightButton)
+            if (b === Qt.MiddleButton)
                 root.rescan();
+            else if (b === Qt.LeftButton && root.storeArgv)
+                Quickshell.execDetached(root.storeArgv);
             else if (root.host)
                 root.host.run("omarchy-shell shell toggle " + P.PLUGIN_ID + " '{}'");
         }

@@ -68,5 +68,7 @@ jobs:
           .tools/bin/bats plugin/tests
           node --test 'plugin/lib/*.test.mjs'
 
-      - name: Store logic + search budget
-        run: node --test 'store/lib/*.test.mjs'
+      - name: Store logic + search budget + launcher
+        run: |
+          node --test 'store/lib/*.test.mjs'
+          .tools/bin/bats store/tests

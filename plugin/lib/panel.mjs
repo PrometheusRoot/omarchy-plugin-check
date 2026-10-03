@@ -7,7 +7,7 @@ export var ICON = {
   shield: "\u{f0499}", safe: "\u{f0cc8}", caution: "\u{f0ecd}", risky: "\u{f0238}", blocked: "\u{f073a}",
   unreviewed: "\u{f0625}", stale: "\u{f0150}", retired: "\u{f003c}", unlisted: "\u{f0337}",
   commit: "\u{f0718}", tree: "\u{f0645}", snap: "\u{f120e}", rescan: "\u{f0450}", ext: "\u{f03cc}",
-  remove: "\u{f0156}", check: "\u{f012c}", cross: "\u{f0156}"
+  remove: "\u{f0156}", check: "\u{f012c}", cross: "\u{f0156}", store: "\u{f04dc}"
 };
 
 // Worst last; the same order as lib/opc.jq `states`.
@@ -30,7 +30,8 @@ export var DESCRIBE = {
   retired: "removed from the marketplace; no verdict is computed"
 };
 
-export var PLUGIN_ID = "io.github.prometheusroot.plugin-check";
+export var PLUGIN_ID = "io.github.prometheusroot.omarchy-store";
+export var APP = "omarchy-store";
 // The project page until the P4 site is live.
 export var SITE = "https://github.com/PrometheusRoot/omarchy-plugin-check";
 var ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -84,9 +85,10 @@ export function shieldLabel(w) {
 }
 
 export function shieldTip(w, doc) {
-  if (!w || w.state === null) return "plugin check · no third-party plugins";
+  var hint = "\nclick: store · right click: verdicts · middle click: rescan";
+  if (!w || w.state === null) return APP + " · no third-party plugins" + hint;
   var snap = doc && doc.snapshot && doc.snapshot.ok ? "" : " · no verified snapshot";
-  return "plugin check · worst: " + w.state + " (" + w.count + ")" + snap;
+  return APP + " · worst: " + w.state + " (" + w.count + ")" + snap + hint;
 }
 
 function eqOf(v) {
@@ -149,6 +151,14 @@ export function cliPath(pluginDirUrl) {
   var p = String(pluginDirUrl || "").replace(/^file:\/\//, "").replace(/\/+$/, "");
   var bin = p + "/bin/omarchy-plugin-check";
   return PATH_RE.test(bin) ? bin : "";
+}
+
+// The store app shipped in the same repository (store/ next to bin/, ADR-0042). Its launcher
+// is single-instance: a second click focuses the open window.
+export function storeArgv(pluginDirUrl) {
+  var p = String(pluginDirUrl || "").replace(/^file:\/\//, "").replace(/\/+$/, "");
+  var bin = p + "/store/bin/omarchy-store";
+  return PATH_RE.test(bin) ? [bin] : null;
 }
 
 export function rescanArgv(bin) {

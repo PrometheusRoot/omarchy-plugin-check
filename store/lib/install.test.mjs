@@ -124,3 +124,26 @@ test("statusState maps a checker status entry to the installed row state", () =>
   assert.equal(I.statusState({ state: "stale", repin: null }), "stale");
   assert.equal(I.statusState({ state: "unreviewed" }), "unreviewed");
 });
+
+test("the checker is found next to the store, by absolute path (ADR-0042)", () => {
+  const c = I.checkerCandidates("/home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/store");
+  assert.deepEqual(c, [
+    "/home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/bin/omarchy-plugin-check",
+    "/home/u/.config/omarchy/plugins/io.github.prometheusroot.omarchy-store/plugin/bin/omarchy-plugin-check"
+  ]);
+  assert.deepEqual(I.checkerCandidates("file:///w/repo/store/"), ["/w/repo/bin/omarchy-plugin-check", "/w/repo/plugin/bin/omarchy-plugin-check"]);
+  assert.deepEqual(I.checkerCandidates("/home/my dir/store"), []);
+  assert.deepEqual(I.checkerCandidates(""), []);
+  const argv = I.probeArgv(c.concat(["/x/$(id)"]));
+  assert.deepEqual(argv.slice(0, 2), ["sh", "-c"]);
+  assert.deepEqual(argv.slice(3), ["sh"].concat(c));
+  assert.equal(I.checkerPath(c[0] + "\n"), c[0]);
+  assert.equal(I.checkerPath("/usr/bin/omarchy-plugin-check"), "/usr/bin/omarchy-plugin-check");
+  assert.equal(I.checkerPath(""), "");
+  assert.equal(I.checkerPath("/x/../bin/omarchy-plugin-check"), "");
+  assert.equal(I.checkerPath("/x/evil"), "");
+  const repo = { id: "a.b", repo: "https://github.com/a/b", verdict: "safe" };
+  assert.deepEqual(I.command(repo, c[0]), [c[0], "--add", "--pin", "--yes", "--enable", "https://github.com/a/b"]);
+  assert.deepEqual(I.pinCommand(repo, c[0]), [c[0], "pin", "--yes", "a.b"]);
+  assert.equal(I.command(repo, "rm -rf")[0], "omarchy-plugin-check");
+});
