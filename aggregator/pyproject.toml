@@ -32,8 +32,6 @@ extend = "../standards/ruff.toml"
 [tool.basedpyright]
 extends = "../standards/basedpyright.json"
 include = ["opc_aggregator", "tests"]
-venvPath = ".."
-venv = ".venv"
 executionEnvironments = [
   { root = "tests", reportUnknownArgumentType = false, reportUnknownVariableType = false, reportUnknownMemberType = false, reportUnknownParameterType = false, reportUnknownLambdaType = false, reportMissingParameterType = false, reportMissingTypeArgument = false, reportPrivateUsage = false },
   { root = "opc_aggregator" },
