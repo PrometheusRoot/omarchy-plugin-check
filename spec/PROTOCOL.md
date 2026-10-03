@@ -70,7 +70,9 @@ or `sigstore sign --bundle`.
 [`providers.json`](schemas/providers.schema.json): `id, name, kind (feed | marketplace-baseline),
 tier (core | verified | community | unsigned), feedUrl, signing (sigstore | none),
 sigstore{oidcIssuer, certificateIdentity (exact workflow SAN), repository}, validFrom,
-validUntil, excludedWindows[], criteriaSupported[], conflictsOfInterest[], contact`. The registry
+validUntil, excludedWindows[], criteriaSupported[], conflictsOfInterest[], contact`. `contact` is
+where security reports about that provider go (ours: the repository's GitHub security-advisory
+form, see SECURITY.md); it is shown on the providers page. The registry
 itself is versioned, expiring and signed with the project key (`ssh-keygen -Y sign -n
 omarchy-plugin-check-providers`). `signing: none` is accepted only in a registry with `dev: true`.
 
@@ -153,3 +155,10 @@ its full store row (`listing`, including the README `gallery`), weekly commits
 `report` extension (`opsec attest|feed --include-report`: capabilities, system areas, network
 hosts, dependencies + advisories, performance, code quality, maintenance, AI summary, verdict
 reasons and criteria; rule identifiers already opaque).
+
+## 8. License of published data
+
+The software implementing this protocol is MIT. The data our aggregator and data repository
+publish (registry, snapshot, store bundle, static API and our provider feed) is CC BY 4.0
+([LICENSE-DATA](../LICENSE-DATA)): reuse it with attribution. Each provider licenses its own
+attestations; quoted marketplace metadata stays under its owners' terms.

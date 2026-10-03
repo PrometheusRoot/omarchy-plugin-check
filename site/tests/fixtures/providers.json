@@ -19,7 +19,7 @@
       "excludedWindows": [],
       "criteriaSupported": ["safe-to-run", "no-network", "no-exec", "no-persistence", "no-privilege", "no-obfuscation", "no-secrets"],
       "conflictsOfInterest": [],
-      "contact": "https://github.com/PrometheusRoot/omarchy-plugin-check/issues"
+      "contact": "https://github.com/PrometheusRoot/omarchy-plugin-check/security/advisories/new"
     },
     {
       "id": "marketplace",

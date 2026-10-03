@@ -1,0 +1,24 @@
+Data license: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Copyright (c) 2026 PrometheusRoot
+
+Scope. This license covers the DATA published by the omarchy-plugin-check aggregator and its data
+repository: the static API (api/v1/**), the signed snapshot (store.json and its signature), the
+store client bundle (store-manifest.json, store-home.json, store-search.json, store-details.json
+and the detail documents), the provider registry (providers.json) and our provider's feed
+(feed/v1/**: index and attestations, including the optional report extension).
+
+It does NOT cover the software in this repository (MIT, see LICENSE), nor data owned by others
+that the published files quote or link: Omarchy marketplace metadata (names, descriptions,
+images and links of listed plugins) stays under its owners' terms, and attestations published by
+other providers stay under theirs.
+
+You may share and adapt the data for any purpose, including commercially, provided you give
+appropriate credit ("omarchy-plugin-check, https://github.com/PrometheusRoot/omarchy-plugin-check"),
+link to the license, and indicate if changes were made. You may not suggest that we endorse you or
+your use. A verdict is a statement about one commit at one time, not a warranty; see the legal code
+for the full terms, disclaimer and limitation of liability.
+
+Legal code: https://creativecommons.org/licenses/by/4.0/legalcode
+Summary:    https://creativecommons.org/licenses/by/4.0/
+SPDX:       CC-BY-4.0
