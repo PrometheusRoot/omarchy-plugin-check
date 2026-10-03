@@ -1,5 +1,6 @@
 ---
 import Icon from '../components/Icon.astro';
+import InstallCmd from '../components/InstallCmd.astro';
 import Base from '../layouts/Base.astro';
 import { decodeIndex } from '../lib/compact';
 import { load, siteIndex } from '../lib/data';
@@ -46,6 +47,7 @@ const catalogAt = (meta.catalogGeneratedAt ?? meta.generatedAt).replace('T', ' '
   nav="index"
 >
   <h1 class="sr">omarchy plugin reviews</h1>
+  <InstallCmd />
   <section aria-label="plugin index" id="index" data-base={base} data-total={rows.length}>
     <div class="toolbar">
       <label class="search">

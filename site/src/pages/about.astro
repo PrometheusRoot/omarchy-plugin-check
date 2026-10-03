@@ -1,11 +1,13 @@
 ---
 import Icon from '../components/Icon.astro';
+import InstallCmd from '../components/InstallCmd.astro';
 import Base from '../layouts/Base.astro';
 
 const base = import.meta.env.BASE_URL;
 ---
-<Base title="about" description="What omarchy-plugin-check is, how its verdicts are trusted, and how to install the checker." nav="about">
+<Base title="about" description="What omarchy-plugin-check is, how its verdicts are trusted, and how to install omarchy-store in one command." nav="about">
   <div class="rhead"><div class="t"><h1>about</h1></div><span class="mute mono" style="font-size:12px">independent community project · not affiliated with omarchy</span></div>
+  <InstallCmd />
   <div class="docgrid">
     <div class="prose">
       <section>
@@ -40,17 +42,16 @@ const base = import.meta.env.BASE_URL;
         </ul>
       </section>
       <section>
-        <h2>install the checker</h2>
-        <p>The checker is itself an Omarchy plugin: a CLI that gates <code>omarchy plugin add</code>, a bar shield and a panel.</p>
-        <pre><code>omarchy plugin add https://github.com/PrometheusRoot/omarchy-plugin-check-plugin --enable
-~/.config/omarchy/plugins/io.github.prometheusroot.plugin-check/bin/omarchy-plugin-check setup
-omarchy-plugin-check update
-omarchy-plugin-check --add --pin &lt;plugin id or git url&gt;</code></pre>
-        <p class="mute" style="font-size:13px">
-          <code>--add</code> refuses blocked and retired plugins, asks before risky, caution, unreviewed, stale or
-          unlisted ones, and <code>--pin</code> checks out the reviewed commit and verifies its tree. Until the production
-          signing key is published only development snapshots exist.
+        <h2>install omarchy-store</h2>
+        <p>
+          One command adds the store, the bar shield and the checker as one Omarchy plugin. Click the shield: the first
+          run downloads the signed snapshot and verifies it on your machine with the key shipped in the plugin.
         </p>
+        <ul>
+          <li><b>Installs are gated.</b> The store installs through <code>omarchy-plugin-check --add --pin</code>: blocked and retired plugins are refused, anything not safe asks first, and the reviewed commit is checked out and its tree verified.</li>
+          <li><b>Nothing else changes unless you ask.</b> A menu entry, a keybind and terminal commands are one button on the store's status tab, which lists every change first, backs up each edited file and can undo them.</li>
+          <li><b>Remove</b> with <code>omarchy plugin remove io.github.prometheusroot.omarchy-store</code>.</li>
+        </ul>
       </section>
     </div>
     <aside class="raside" aria-label="links">
