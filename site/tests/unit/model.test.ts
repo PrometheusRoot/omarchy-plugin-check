@@ -97,8 +97,8 @@ describe('report helpers', () => {
     expect(commitView(row({ commit: null }), [])).toBeNull();
   });
   it('never shows opaque rule ids (anti-oracle)', () => {
-    expect(publicReason('r.01e0e842c851')).toBe('');
-    expect(publicReason('zizmor.unpinned-uses; r.61ca01356bc1, zizmor.cache-poisoning')).toBe(
+    expect(publicReason('r.0123456789ab')).toBe('');
+    expect(publicReason('zizmor.unpinned-uses; r.abcdef012345, zizmor.cache-poisoning')).toBe(
       'zizmor.unpinned-uses · zizmor.cache-poisoning',
     );
   });
