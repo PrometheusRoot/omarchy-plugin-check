@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "kind": "omarchy-plugin-check/store-details",
-  "version": 1790991725,
+  "version": 1790993595,
   "docs": {
-    "akitaonrails.ai-usagebar": "4819963d21bbe8c04841eaeea9a8c47086bfbf753db2196207566da08489b1ec",
-    "io.github.letsfg.flights": "b166e5f36b1ebe0ee63f705e063530775f3ed22353abeb0d6937218ca6b75df0",
-    "omamail": "571bd44e7c678e8ee71d9efa0c9ae5fad6223da74f878080ada64b6b7ddd4e36"
+    "akitaonrails.ai-usagebar": "d9cb4ea91c099dc7b31e38da8a862a2d8376dc450fdaa25d41aff64d32a42aad",
+    "io.github.letsfg.flights": "d3a9002c0c3ffb98781c23a9e5cff600bbce02832bae373fa46a874bdd28d664",
+    "omamail": "8aa10bf30b62606d54f8edf253af8f1bb7a252d3752bc88a728788e3c2fb7779"
   }
 }

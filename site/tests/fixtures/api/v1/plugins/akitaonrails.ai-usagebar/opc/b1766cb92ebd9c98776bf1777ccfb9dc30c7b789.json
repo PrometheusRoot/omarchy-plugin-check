@@ -361,7 +361,7 @@
         "aiEscalation": null,
         "summary": "caution: score 16; 1 medium, 12 low; uses processExec, externalCode",
         "reasons": [
-          "capability processExec = med",
+          "capabilities: processExec",
           "relies on external code not in the reviewed commit, so safe-to-run is not checked: ai-usagebar (binary, aur), ai-usagebar (system-package, aur), ai-usagebar-bin (system-package, aur), aes (package, cargo), base64 (package, cargo), cbc (package, cargo) +20 more"
         ],
         "criteria": {

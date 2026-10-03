@@ -251,9 +251,7 @@
         "aiEscalation": null,
         "summary": "caution: score 13; 4 low; uses processExec, network, fileWrite",
         "reasons": [
-          "capability processExec = med",
-          "capability network = med",
-          "capability fileWrite = low"
+          "capabilities: processExec, network, fileWrite"
         ],
         "criteria": {
           "checked": [
