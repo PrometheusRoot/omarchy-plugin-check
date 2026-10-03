@@ -14,6 +14,9 @@ dependencies = ["jsonschema>=4.18", "referencing>=0.30"]
 [dependency-groups]
 dev = ["pytest==9.1.1", "pytest-cov==7.1.0", "hypothesis==6.168.3"]
 
+[project.scripts]
+opc-feed = "opc_spec.feed_cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["opc_spec"]
 
@@ -26,6 +29,8 @@ extend = "../standards/ruff.toml"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "D", "ANN", "PLR", "FBT"]
+# why: printing is the product of the CLI entry point
+"opc_spec/feed_cli.py" = ["T201"]
 
 [tool.basedpyright]
 extends = "../standards/basedpyright.json"
@@ -63,5 +68,5 @@ forbidden_modules = ["opsec", "opsec_orch", "opc_aggregator", "opc_collector"]
 [[tool.importlinter.contracts]]
 name = "spec is pure (no network, no processes)"
 type = "forbidden"
-source_modules = ["opc_spec.vocab", "opc_spec.ids", "opc_spec.marketplace", "opc_spec.jsonv"]
+source_modules = ["opc_spec.vocab", "opc_spec.ids", "opc_spec.marketplace", "opc_spec.jsonv", "opc_spec.feed"]
 forbidden_modules = ["subprocess", "socket", "urllib", "http", "os", "shutil"]
