@@ -1,11 +1,14 @@
 # Pinned developer binaries (not scanners; those live in scanner/containers/tools.lock).
 # Installed into the gitignored .tools/bin by scripts/install-dev-tools.sh. Format:
 # name  version  url  sha256 (x86_64 linux). Checksums verified against upstream
-# SHA256SUMS/checksums files where published; shfmt and bats (a tag archive) publish none
-# (sha256 pinned on first download).
+# SHA256SUMS/checksums files (or GitHub release asset digests) where published; shfmt and bats
+# (a tag archive) publish none (sha256 pinned on first download). shellcheck and zizmor match
+# the scanner's scanner/containers/tools.lock pins (same version, same asset).
 just        1.58.0   https://github.com/casey/just/releases/download/1.58.0/just-1.58.0-x86_64-unknown-linux-musl.tar.gz          4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d
 prek        0.5.4    https://github.com/j178/prek/releases/download/v0.5.4/prek-x86_64-unknown-linux-musl.tar.gz                  805632185f4539ca2eb0fd1b3b52ea842cecbc4ba1e749be430df948621353b0
 shfmt       3.14.1   https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64                             76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
 actionlint  1.7.12   https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz           8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 packer      1.16.1   https://releases.hashicorp.com/packer/1.16.1/packer_1.16.1_linux_amd64.zip                                af38a9e93e4ed1b9ca68206ae969c64c300c82a3dde46a780dfa629f0867f651
 bats        1.14.0   https://github.com/bats-core/bats-core/archive/refs/tags/v1.14.0.tar.gz                    bb537b70b15b732f6d8827dd6578e3d8ce166636ce1f18ea9a074184fcce9177
+shellcheck  0.11.0   https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz    8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+zizmor      1.30.1   https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz       e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a
