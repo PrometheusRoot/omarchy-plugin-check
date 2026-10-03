@@ -27,11 +27,11 @@ ADRs ([docs/decisions/](decisions/README.md)); module boundaries in
 | `just arch` | import-linter contracts + deptry | CI |
 | `just docs` | regenerate generated doc sections, fail if stale; recipe/pin/`why:` checks | CI, pre-commit |
 | `just snapshot --out DIR --providers F` | collector + aggregator end to end → `api/v1/`, signed `store.json` | — |
-| `just store-test` | `node --test store/lib`: store logic + search latency benchmark (p95 < 5 ms/keystroke over 4.5k) | before store changes |
+| `just store-test` | `node --test 'store/lib/*.test.mjs'`: store logic + search latency benchmark (p95 < 5 ms/keystroke over 4.5k) | before store changes |
 | `just store-lint` | qmllint (filtered Quickshell false positives, each with a reason) + qmlformat check + `ui/qmldir` freshness | before store changes |
 | `just store-run [--dev]` | run the store floating at 1280x800 (`--dev`: fake installer, sample installed list, `t` themes) | — |
 | `just store-dev-bundle DIR` | refresh `store/dev/` (bundled dev data) from a snapshot build dir | after a snapshot schema change |
-| `just plugin-test` | `bats plugin/tests` (temp HOME, fake `omarchy` + `git ls-remote`, per-test signing key) + `node --test plugin/lib` | before plugin changes |
+| `just plugin-test` | `bats plugin/tests` (temp HOME, fake `omarchy` + `git ls-remote`, per-test signing key) + `node --test 'plugin/lib/*.test.mjs'` | before plugin changes |
 | `just plugin-lint` | shellcheck (`enable=all`) + shfmt + qmllint (filtered, with reasons) + qmlformat + `omarchy plugin validate` | before plugin changes |
 | `just site-dev` | `astro dev` over `OPC_API_DIR` (default: `.snapshot/api/v1`, a gitignored local snapshot build) | — |
 | `just site-build` | static build into `site/dist` (+ api/v1, snapshot files, schemas, keys); prints time and size | — |

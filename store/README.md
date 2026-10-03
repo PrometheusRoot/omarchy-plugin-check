@@ -50,7 +50,7 @@ sections · dialogs: `y` confirm. The map is `lib/nav.mjs` (tested).
 | `ui/` | QML: layout and bindings only. Singletons `Theme`, `Store`, `Installer`, `ImageCache`; `worker.mjs` (WorkerScript) |
 | `bin/` | `omarchy-plugin-store` launcher; `omarchy-plugin-store-verify` (bundle + detail verification, ADR-0032) |
 | `lib/*.mjs` | pure logic, no Qt types (ADR-0031): `search` index + per-keystroke search over columns, `data` bundle adapter (the only file that knows snapshot fields), `rank`, `install` state machine + argv, `nav` key map + grid cursor, `theme` colors.toml → tokens, `format`, `imgcache`, `service` (worker protocol) |
-| `lib/*.test.mjs` | `node --test store/lib` (`just store-test`), incl. the search latency benchmark |
+| `lib/*.test.mjs` | `node --test 'store/lib/*.test.mjs'` (`just store-test`), incl. the search latency benchmark |
 | `SNAPSHOT-FIELDS.md` | every bundle field the UI reads |
 | `dev/` | bundled dev data: the client bundle of a real DEV snapshot (4,777 plugins, 3 reviewed, real GitHub + marketplace stats) and the reviewed plugins' detail documents (`just store-dev-bundle DIR`) |
 | `tools/` | `dev-bundle.sh`, `qmllint.sh` (`just store-lint`), `gen-qmldir.sh`, `coldstart.sh [--bench]`, `shot.sh` |

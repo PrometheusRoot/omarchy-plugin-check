@@ -65,7 +65,7 @@ jobs:
       - name: Checker plugin (bats + node)
         run: |
           .tools/bin/bats plugin/tests
-          node --test plugin/lib
+          node --test 'plugin/lib/*.test.mjs'
 
       - name: Store logic + search budget
-        run: node --test store/lib
+        run: node --test 'store/lib/*.test.mjs'
