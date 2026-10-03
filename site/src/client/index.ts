@@ -85,15 +85,26 @@ function render(push = false): void {
   }
 }
 
+let timer: number | undefined;
+
 function update(patch: Partial<Query>, opts: { keepPage?: boolean; push?: boolean } = {}): void {
+  // A typed query still waiting for its debounce goes in now: otherwise render() would write the
+  // old query back into the box and the pending update would then re-apply it.
+  if (timer !== undefined) {
+    window.clearTimeout(timer);
+    timer = undefined;
+    if (input && patch.q === undefined) patch = { ...patch, q: input.value };
+  }
   query = { ...query, ...patch, page: opts.keepPage ? (patch.page ?? query.page) : (patch.page ?? 1) };
   render(opts.push);
 }
 
-let timer: number | undefined;
 input?.addEventListener('input', () => {
   window.clearTimeout(timer);
-  timer = window.setTimeout(() => update({ q: input.value }), 60);
+  timer = window.setTimeout(() => {
+    timer = undefined;
+    update({ q: input.value });
+  }, 60);
 });
 cat?.addEventListener('change', () => update({ cat: cat.value }));
 kind?.addEventListener('change', () => update({ kind: kind.value }));
