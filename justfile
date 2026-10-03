@@ -62,7 +62,7 @@ snapshot *args:
 
 # Store app (store/): node tests incl. the search latency benchmark over the dev search columns
 store-test:
-    node --test store/lib
+    node --test 'store/lib/*.test.mjs'
 
 # Store app: qmllint + qmlformat check + qmldir freshness (`store/tools/qmllint.sh --fix` formats)
 store-lint:
@@ -80,7 +80,7 @@ store-dev-bundle dir:
 # Checker plugin (plugin/): bats CLI tests (temp HOME, fake omarchy + git ls-remote, per-test signing key) + node tests of the panel logic
 plugin-test:
     bats plugin/tests
-    node --test plugin/lib
+    node --test 'plugin/lib/*.test.mjs'
 
 # Checker plugin: shellcheck (enable=all) + shfmt + qmllint + qmlformat + omarchy plugin validate (`plugin/tools/lint.sh --fix` formats)
 plugin-lint:

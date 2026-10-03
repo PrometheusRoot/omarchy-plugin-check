@@ -81,5 +81,5 @@ compared with the signed `verdict.commit` / `verdict.tree` of the snapshot (ADR-
 `lib/*.jq` hold every decision (pure jq, `include "opc"`), `bin/omarchy-plugin-check` is glue,
 `lib/panel.mjs` is the panel's logic (pure ES module). Tests: `bats tests/` (temp HOME, fake
 `omarchy`, fake `git ls-remote`, a snapshot signed with a key generated per test) and
-`node --test lib`. Lint: `tools/lint.sh` (shellcheck with every optional check, shfmt,
+`node --test 'lib/*.test.mjs'`. Lint: `tools/lint.sh` (shellcheck with every optional check, shfmt,
 qmllint, qmlformat, `omarchy plugin validate`).
