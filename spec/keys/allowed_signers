@@ -1,0 +1,5 @@
+# omarchy-plugin-check PRODUCTION signing key (ADR-0028, ADR-0039): store.json, the store client
+# bundle's store-manifest.json and providers.json. ed25519, SHA256:pjXUzN+57yC2zez/zQd1BGKfnY5eopJDJH1GJLop8vQ
+# The private half exists only as the OPC_SNAPSHOT_KEY Actions secret of
+# PrometheusRoot/omarchy-plugin-check-data (plus the maintainer's offline backup).
+omarchy-plugin-check namespaces="omarchy-plugin-check-snapshot,omarchy-plugin-check-providers" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIseFdVXMU5J5rY3Rw+F8YY+X3zwYtW7thxGrMXGwcxl

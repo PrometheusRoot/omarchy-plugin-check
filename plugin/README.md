@@ -52,8 +52,10 @@ omarchy plugin add https://github.com/PrometheusRoot/omarchy-plugin-check-plugin
 omarchy-plugin-check update
 ```
 
-Until the production signing key is published, only development snapshots exist; they verify
-with `OPC_DEV_KEYS=1 OPC_DEV_SIGNERS=<path to allowed_signers.dev>`.
+`update` fetches the production snapshot from
+`https://prometheusroot.github.io/omarchy-plugin-check-data/` (published daily, valid 7 days) and
+verifies it with the production key in `keys/allowed_signers` (ADR-0039). Development snapshots
+verify only with `OPC_DEV_KEYS=1 OPC_DEV_SIGNERS=<path to allowed_signers.dev>`.
 
 ## States
 

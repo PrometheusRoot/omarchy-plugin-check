@@ -6,7 +6,7 @@ set -Eeuo pipefail
 
 store="${1:?usage: verify-snapshot.sh store.json [sig] [allowed_signers] [min-version]}"
 sig="${2:-$store.sig}"
-allowed="${3:-$(dirname "${BASH_SOURCE[0]}")/keys/allowed_signers.dev}"
+allowed="${3:-$(dirname "${BASH_SOURCE[0]}")/keys/allowed_signers}"
 min_version="${4:-0}"
 namespace="omarchy-plugin-check-snapshot"
 principal="omarchy-plugin-check"
