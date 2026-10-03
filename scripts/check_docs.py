@@ -175,14 +175,14 @@ def check_suppressions() -> None:
 
 def check_rule_docs() -> None:
     """Verdict/score/schema changes on this branch need a doc/ADR/changelog change too."""
-    for base in ("origin/main", "main"):
+    for base in ("origin/master", "master"):
         mb = subprocess.run(
             ["git", "merge-base", "HEAD", base], cwd=ROOT, capture_output=True, text=True, check=False
         )
         if mb.returncode == 0:
             break
     else:
-        return  # no main branch yet (first PRs): nothing to compare against
+        return  # no master to compare against (e.g. a shallow checkout)
     diff = subprocess.run(
         ["git", "diff", "--name-only", mb.stdout.strip()],
         cwd=ROOT,
