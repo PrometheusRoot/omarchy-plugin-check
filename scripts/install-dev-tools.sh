@@ -28,6 +28,7 @@ while read -r name version url sha; do
   tmp="$(mktemp -d)"
   case "$file" in
     *.tar.gz) tar -xzf "$file" -C "$tmp" ;;
+    *.tar.xz) tar -xJf "$file" -C "$tmp" ;;
     *.zip) python3 -m zipfile -e "$file" "$tmp" ;;
     *) cp "$file" "$tmp/$name" ;;
   esac
