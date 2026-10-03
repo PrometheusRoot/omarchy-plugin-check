@@ -139,6 +139,15 @@ group of the root `pyproject.toml`; `just setup` uses plain `venv` + `pip --grou
   and never take string offsets from `index`/`rindex`/`indices` (byte offsets before 1.8) —
   search `explode`d codepoints instead.
 
+## Commits and merges
+
+- Work on a branch and open a PR; `master` takes only rebase-merges (linear history, required
+  checks `python` and `plugin-store`), never merge or squash commits (ADR-0041).
+- Every commit is a Conventional Commit: `type(scope): summary`, types
+  `feat fix docs refactor test chore ci build perf security`, scope = a top-level dir.
+- Each commit stands alone: it passes `just check` and carries its own docs/ADR changes;
+  squash fixups locally before the merge.
+
 ## Coverage targets
 
 | Scope | Target | Enforced by |

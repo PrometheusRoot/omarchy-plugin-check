@@ -1,6 +1,6 @@
 # 0017. Conventional Commits on PR titles, squash merge
 
-- Status: accepted
+- Status: superseded by 0041
 - Date: 2026-10-01
 - Supersedes: —
 
