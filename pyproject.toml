@@ -1,0 +1,15 @@
+# Dev workspace of the public repo (not a package). Pinned developer tools for `just setup`;
+# pins mirror standards/versions.toml (scripts/check_docs.py fails on drift; Renovate moves both).
+# pip: `pip install --group pyproject.toml:dev` · uv: `uv sync --only-group dev`.
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "hypothesis==6.168.3",
+  "ruff==0.16.9",
+  "basedpyright==1.40.1",
+  "import-linter==2.15",
+  "deptry==0.25.1",
+  "check-jsonschema==0.38.2",
+]

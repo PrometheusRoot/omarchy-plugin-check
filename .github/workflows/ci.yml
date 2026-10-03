@@ -1,0 +1,71 @@
+name: ci
+
+# Public packages (spec, aggregator, collector), checker plugin and store app. The site has its own
+# workflow (site.yml). The private scanner is tested in its own repository.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the public packages + pinned dev group
+        run: |
+          python -m pip install -U 'pip>=25.1'
+          python -m pip install --group pyproject.toml:dev
+          for p in spec aggregator collector; do python -m pip install -e "$p"; done
+
+      - name: Types (basedpyright strict)
+        run: for p in spec aggregator collector; do (cd "$p" && basedpyright); done
+
+      - name: Tests + coverage floors
+        run: for p in spec aggregator collector; do (cd "$p" && python -m pytest -q); done
+
+      - name: Import contracts + dependency hygiene
+        run: for p in spec aggregator collector; do (cd "$p" && lint-imports && deptry .); done
+
+      - name: Generated docs fresh
+        run: python scripts/check_docs.py
+
+  plugin-store:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Pinned dev binaries (sha256-verified)
+        run: scripts/install-dev-tools.sh
+
+      - name: Checker plugin (bats + node)
+        run: |
+          .tools/bin/bats plugin/tests
+          node --test plugin/lib
+
+      - name: Store logic + search budget
+        run: node --test store/lib
