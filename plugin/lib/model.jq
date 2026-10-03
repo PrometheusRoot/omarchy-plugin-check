@@ -20,7 +20,7 @@ include "opc";
    end) as $target
 | classify($row; $target; $rev) as $state
 | gate($state; $row) as $g0
-| ($local.installed | not) and ($pin | not) and $upstream.head == null and $reviewed != null as $upUnknown
+| (($local.installed | not) and ($pin | not) and $upstream.head == null and $reviewed != null) as $upUnknown
 | ($snap.providers // {}) as $pmeta
 | [($view.providers // [])[]
    | select(.counted == true and (.tier == "core" or .tier == "verified"))

@@ -88,7 +88,8 @@ group of the root `pyproject.toml`; `just setup` uses plain `venv` + `pip --grou
   no parent-relative imports (`from opc_aggregator.x import y`).
 - **Suppressions**: every `noqa`, `type: ignore`, `pyright: ignore`, `shellcheck disable` carries a
   trailing `# why: <reason>` on the same line (`just docs` greps for it).
-- **basedpyright strict** everywhere, no baseline.
+- **basedpyright strict** everywhere, no baseline. It resolves imports from the `python` on `PATH`
+  (`just` puts `.venv/bin` first; CI uses the setup-python interpreter), so no `venvPath` in config.
 - **Docstrings** (Google style) state the contract — inputs, invariants, return — not the steps.
 - **Tests**: unit tests per module; adapters behind ports (`Fetcher`, `Verifier`, `GraphQL`, `Http`)
   are replaced by fakes (no network). Property tests (hypothesis) pin the merge and ranking
@@ -133,6 +134,10 @@ group of the root `pyproject.toml`; `just setup` uses plain `venv` + `pip --grou
   key generated in the test; they never touch the real Omarchy config.
 - Process arguments from data (plugin ids, paths, URLs) are validated in a pure function and
   passed as argv (`lib/panel.mjs`); git runs with `core.fsmonitor=false` inside plugin checkouts.
+- jq filters run on jq 1.7 and 1.8 (CI's Ubuntu jq is 1.7, Omarchy ships 1.8): parenthesize
+  the left side of every `... as $x` binding (`(a and b) as $x`: jq 1.7 binds only the last operand),
+  and never take string offsets from `index`/`rindex`/`indices` (byte offsets before 1.8) —
+  search `explode`d codepoints instead.
 
 ## Coverage targets
 
