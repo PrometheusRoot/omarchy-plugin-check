@@ -1324,7 +1324,7 @@
           },
           {
             "path": ".github/workflows/release.yml",
-            "reason": "zizmor.cache-poisoning"
+            "reason": "r.738c1f331045"
           },
           {
             "path": "Cargo.toml",

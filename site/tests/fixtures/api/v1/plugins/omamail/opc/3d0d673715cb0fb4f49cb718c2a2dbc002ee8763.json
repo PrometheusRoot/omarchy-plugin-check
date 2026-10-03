@@ -595,7 +595,7 @@
         "hotspots": [
           {
             "path": ".github/workflows/release.yml",
-            "reason": "zizmor.unpinned-uses; zizmor.cache-poisoning"
+            "reason": "r.2349fafea766; r.738c1f331045"
           },
           {
             "path": "AuthManager.qml",
