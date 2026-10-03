@@ -16,9 +16,18 @@ Pages with the static API next to it. Independent community project, not affilia
 
 | Variable | Default |
 |---|---|
-| `OPC_API_DIR` | the local dev snapshot's `api/v1` (see `src/lib/env.ts`) |
+| `OPC_API_DIR` | `../.snapshot/api/v1` (relative to `site/`): a local, gitignored snapshot build at the repo root |
 | `OPC_SNAPSHOT_DIR` | the directory above `api/` if it holds `store.json` |
-| `OPC_REGISTRY` | `providers.json` next to the snapshot, else the dev registry |
+| `OPC_REGISTRY` | `providers.json` next to the snapshot (two levels above `OPC_API_DIR`), else none |
+
+`OPC_API_DIR` is the one setting that matters: point it at any built `api/v1/` (CI: the downloaded,
+verified snapshot bundle; tests: `tests/fixtures/api/v1`). For local development build a snapshot
+into the default place once:
+
+```sh
+scripts/build-snapshot.sh --out .snapshot --providers providers.json --providers-sig providers.json.sig --no-github
+cp providers.json .snapshot/   # optional: enables the providers page
+```
 | `OPC_SITE_BASE` | `/omarchy-plugin-check/` |
 | `OPC_SITE_URL` | `https://prometheusroot.github.io` |
 

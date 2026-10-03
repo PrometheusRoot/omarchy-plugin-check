@@ -2,7 +2,8 @@
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-// why: the dev default is the local snapshot build of the P3 pipeline; CI sets OPC_API_DIR.
+// why: the dev default is a local snapshot build (scripts/build-snapshot.sh --out .snapshot) at the
+// repo root, relative to site/ where every recipe runs; it is gitignored. CI sets OPC_API_DIR.
 const DEV_SNAPSHOT = '../.snapshot';
 
 function withSlashes(base: string): string {
@@ -31,14 +32,11 @@ export function siteEnv(env: Record<string, string | undefined> = process.env): 
     : existsSync(`${guessRoot}/store.json`)
       ? guessRoot
       : null;
-  const devRegistry = `${dirname(DEV_SNAPSHOT)}/snapshot-work/providers.dev.json`;
   const registry = env.OPC_REGISTRY
     ? resolve(env.OPC_REGISTRY)
     : existsSync(`${apiDir}/../../providers.json`)
       ? resolve(`${apiDir}/../../providers.json`)
-      : !env.OPC_API_DIR && existsSync(devRegistry)
-        ? devRegistry
-        : null;
+      : null;
   return {
     apiDir,
     snapshotDir,

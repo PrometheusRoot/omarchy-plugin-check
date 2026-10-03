@@ -34,3 +34,6 @@ mutants/
 store/dev/store-home.json
 store/dev/store-search.json
 store/.qmlls.ini
+
+# Site: local dev snapshot (scripts/build-snapshot.sh --out .snapshot), the default OPC_API_DIR
+/.snapshot
