@@ -22,7 +22,7 @@ New ADR: copy [0000-template.md](0000-template.md) to the next number, keep it t
 | [0014](0014-store-app-is-a-standalone-local-first-quickshell-app.md) | Store app is a standalone, local-first Quickshell app | accepted | 2026-10-01 |
 | [0015](0015-toolchain-uv-ruff-basedpyright-pytest-hypothesis-biome-prek.md) | Toolchain: uv, ruff, basedpyright, pytest + hypothesis; Biome; prek; just; Renovate | accepted | 2026-10-01 |
 | [0016](0016-vendor-shared-standards-from-the-public-repo.md) | Vendor shared standards from the public repo | accepted | 2026-10-01 |
-| [0017](0017-conventional-commits-on-pr-titles-squash-merge.md) | Conventional Commits on PR titles, squash merge | accepted | 2026-10-01 |
+| [0017](0017-conventional-commits-on-pr-titles-squash-merge.md) | Conventional Commits on PR titles, squash merge | superseded by 0041 | 2026-10-01 |
 | [0018](0018-private-scanner-decision.md) | Private scanner decision | accepted (private) | 2026-10-01 |
 | [0019](0019-unreviewed-external-code-is-reported-and-caps-the-verdict.md) | Unreviewed external code is reported and caps the verdict | accepted | 2026-10-01 |
 | [0020](0020-private-scanner-decision.md) | Private scanner decision | accepted (private) | 2026-10-02 |
@@ -45,3 +45,5 @@ New ADR: copy [0000-template.md](0000-template.md) to the next number, keep it t
 | [0037](0037-opaque-ids-are-hmac-tokens-under-a-provider-only-key.md) | Opaque ids are HMAC tokens under a provider-only key | accepted | 2026-10-03 |
 | [0038](0038-published-reasons-name-bands-not-thresholds-or-weights.md) | Published reasons name score bands, not thresholds or weights | accepted | 2026-10-03 |
 | [0039](0039-production-key-lives-in-the-data-repo-which-signs-the-feed-and-publishes-to-pages.md) | The production key lives in the data repo, which signs the feed keyless and publishes the snapshot to its Pages | accepted | 2026-10-03 |
+| [0040](0040-private-scanner-decision.md) | Private scanner decision | accepted (private) | 2026-10-03 |
+| [0041](0041-rebase-merge-linear-history-conventional-commits-per-commit.md) | Rebase-merge onto a linear history; every commit is a Conventional Commit | accepted | 2026-10-03 |
