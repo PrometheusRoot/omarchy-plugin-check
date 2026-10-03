@@ -177,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("build", help="feeds → api/v1 (+ store.json with --stats/--ranking)")
     b.add_argument("--providers", required=True, help="providers.json")
     b.add_argument("--providers-sig", help="providers.json.sig (required unless the registry is dev)")
-    b.add_argument("--allowed-signers", default="spec/keys/allowed_signers.dev")
+    b.add_argument("--allowed-signers", default="spec/keys/allowed_signers")
     b.add_argument("--catalog", required=True, help="marketplace catalog.json")
     b.add_argument("--registry", help="marketplace registry.json (baseline source, migrations, retired)")
     b.add_argument("--out", required=True)
@@ -207,7 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
     v = sub.add_parser("verify-snapshot", help="verify store.json signature, expiry, version")
     v.add_argument("store")
     v.add_argument("--sig")
-    v.add_argument("--allowed-signers", default="spec/keys/allowed_signers.dev")
+    v.add_argument("--allowed-signers", default="spec/keys/allowed_signers")
     v.add_argument("--min-version", type=int)
     v.set_defaults(func=cmd_verify)
     return p

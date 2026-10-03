@@ -1,5 +1,7 @@
-# omarchy-plugin-check snapshot signers (ssh-keygen -Y verify, ADR-0013 / ADR-0028).
-# The production key is not published yet: until it is, no snapshot verifies here and the
-# CLI says so. Development snapshots verify only with OPC_DEV_KEYS=1 plus a separate dev
-# allowed_signers file (OPC_DEV_SIGNERS, default ~/.config/omarchy-plugin-check/allowed_signers.dev);
-# the dev key is never shipped in this file (ADR-0028).
+# omarchy-plugin-check snapshot signers (ssh-keygen -Y verify, ADR-0013 / ADR-0028 / ADR-0039).
+# The production key, restricted to the snapshot namespace (store.json, store-manifest.json);
+# same key as spec/keys/allowed_signers, ed25519 SHA256:pjXUzN+57yC2zez/zQd1BGKfnY5eopJDJH1GJLop8vQ.
+# Development snapshots verify only with OPC_DEV_KEYS=1 plus a separate dev allowed_signers file
+# (OPC_DEV_SIGNERS, default ~/.config/omarchy-plugin-check/allowed_signers.dev); the dev key is
+# never shipped in this file (ADR-0028).
+omarchy-plugin-check namespaces="omarchy-plugin-check-snapshot" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIseFdVXMU5J5rY3Rw+F8YY+X3zwYtW7thxGrMXGwcxl

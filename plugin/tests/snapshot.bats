@@ -9,11 +9,21 @@ setup() {
   make_remote test/caution-mail test.caution-mail
 }
 
-@test "no shipped production key yet: every snapshot is refused without dev trust" {
+@test "the shipped production key does not trust a snapshot signed by any other key" {
+  grep -q '^omarchy-plugin-check namespaces="omarchy-plugin-check-snapshot" ssh-ed25519 ' "${ROOT}/keys/allowed_signers"
   make_snapshot
   run "${CLI}" update "file://${SNAP}/store.json"
   [ "${status}" -eq 4 ]
-  [[ ${output} == *"no trusted signing key yet"* ]]
+  [[ ${output} == *"bad signature"* ]]
+  [ ! -e "${HOME}/.cache/omarchy-plugin-check/store.json" ]
+}
+
+@test "an empty keys/allowed_signers refuses every snapshot without dev trust" {
+  grep '^#' "${ROOT}/keys/allowed_signers" > "${PLUGIN}/keys/allowed_signers"
+  make_snapshot
+  run "${CLI}" update "file://${SNAP}/store.json"
+  [ "${status}" -eq 4 ]
+  [[ ${output} == *"no trusted signing key"* ]]
   [ ! -e "${HOME}/.cache/omarchy-plugin-check/store.json" ]
 }
 

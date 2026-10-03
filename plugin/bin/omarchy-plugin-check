@@ -25,7 +25,7 @@ config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy-plugin-check"
 plugins_dir="${HOME}/.config/omarchy/plugins"
 changes_md="${HOME}/.config/omarchy/CHANGES.md"
 menu_file="${HOME}/.config/omarchy/extensions/omarchy-menu.jsonc"
-default_url="https://prometheusroot.github.io/omarchy-plugin-check/store-manifest.json"
+default_url="https://prometheusroot.github.io/omarchy-plugin-check-data/store-manifest.json"
 omarchy=${OPC_OMARCHY:-omarchy}
 export GIT_TERMINAL_PROMPT=0
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -oBatchMode=yes}"
@@ -78,7 +78,7 @@ sigcheck() { # sigcheck FILE SIG -> the reason, or nothing when the signature is
   local allowed
   allowed=$(signers)
   if ! grep -q '^[^#[:space:]]' "${allowed}"; then
-    say "no trusted signing key yet (the production key is not published; OPC_DEV_KEYS=1 for development)"
+    say "no trusted signing key (keys/allowed_signers is empty; OPC_DEV_KEYS=1 for development)"
   elif [[ ! -s $1 || ! -s $2 ]]; then
     say "${1##*/} or its signature is missing"
   elif ! ssh-keygen -Y verify -f "${allowed}" -I omarchy-plugin-check -n omarchy-plugin-check-snapshot \

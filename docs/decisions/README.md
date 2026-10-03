@@ -44,3 +44,4 @@ New ADR: copy [0000-template.md](0000-template.md) to the next number, keep it t
 | [0036](0036-the-site-is-a-static-astro-build-over-api-v1-with-a-compact-client-index.md) | The site is a static Astro build over api/v1, with a compact client index | accepted | 2026-10-02 |
 | [0037](0037-opaque-ids-are-hmac-tokens-under-a-provider-only-key.md) | Opaque ids are HMAC tokens under a provider-only key | accepted | 2026-10-03 |
 | [0038](0038-published-reasons-name-bands-not-thresholds-or-weights.md) | Published reasons name score bands, not thresholds or weights | accepted | 2026-10-03 |
+| [0039](0039-production-key-lives-in-the-data-repo-which-signs-the-feed-and-publishes-to-pages.md) | The production key lives in the data repo, which signs the feed keyless and publishes the snapshot to its Pages | accepted | 2026-10-03 |

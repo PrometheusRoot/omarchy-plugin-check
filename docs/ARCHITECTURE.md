@@ -20,7 +20,9 @@ client can tell when the installed HEAD has drifted.
    opc-collect rank (api/v1/index.json + stats.json) → ranking.json
    opc-aggregate build --stats --ranking --sign-key → store.json + .sig, store client bundle (ADR-0032):
                 store-manifest.json + .sig → sha256 of store-home/-search/-details.json
-[GitHub Pages]  Astro site + api/v1 + store.json + client bundle
+[data repo Pages] store.json + client bundle + api/v1 + providers.json, signed with the production
+                key in the data repo's publish.yml (ADR-0039); immutable release per version
+[GitHub Pages]  Astro site, built from the latest release's snapshot.tar.gz
 [plugin]        omarchy-plugin-check CLI / menu / QML panel  ← verifies store.json (ssh-keygen -Y)
 [store]         store app  ← verifies store-manifest.json (ssh-keygen -Y) + sha256 of each file
 ```
@@ -96,7 +98,7 @@ docs/RANKING.md.
 
 **spec is pure (no network, no processes)** (forbidden)
 
-- `opc_spec.vocab`, `opc_spec.ids`, `opc_spec.marketplace`, `opc_spec.jsonv`
+- `opc_spec.vocab`, `opc_spec.ids`, `opc_spec.marketplace`, `opc_spec.jsonv`, `opc_spec.feed`
 - may not import: `subprocess`, `socket`, `urllib`, `http`, `os`, `shutil`
 
 **aggregator layers** (layers)
@@ -238,7 +240,7 @@ omarchy-shell: BarWidget.qml (shield, worst state) ──toggle──► Panel.q
 
 ## Phase status
 
-P3 protocol, aggregator, collector, signed snapshot (local dev run done; data repo + Pages pending) ·
-P4 site (static Astro build done; Pages deploy pending a published snapshot) · P5 checker plugin
-(CLI + panel + bar widget, done; mirror repo pending) · P5b store app (v1 UI + engine, done) ·
+P3 protocol, aggregator, collector, signed snapshot (production: data repo, ADR-0039) ·
+P4 site (static Astro build, deployed daily from the published snapshot) · P5 checker plugin
+(CLI + panel + bar widget; mirror repo `omarchy-plugin-check-plugin`) · P5b store app (v1 UI + engine, done) ·
 P6 scheduling · P7 scale/search/dynamic. The scanner phases (P0–P2) live in the private repository.

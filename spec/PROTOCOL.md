@@ -65,6 +65,12 @@ every file. `version` strictly increases per publish; `expires` is at most 30 da
 The index signature is produced with `cosign sign-blob --bundle index.json.sigstore.json index.json`
 or `sigstore sign --bundle`.
 
+`opc-feed` (in `opc_spec`) is the provider-side helper: `opc-feed check feed/v1 --provider ID`
+validates every unsigned `statements/<pluginId>/<commit>.json` (schema, provider, predicateType,
+path = plugin id + subject commit) and lists those without a bundle; `opc-feed index feed/v1
+--provider ID` rebuilds `index.json` from the signed statements (each bundle must carry exactly
+its statement). Our feed is signed this way in its data repository (ADR-0039).
+
 ## 4. The registry
 
 [`providers.json`](schemas/providers.schema.json): `id, name, kind (feed | marketplace-baseline),
@@ -115,8 +121,11 @@ spec/verify-snapshot.sh store.json store.json.sig spec/keys/allowed_signers
 
 which runs `ssh-keygen -Y verify -f allowed_signers -I omarchy-plugin-check -n
 omarchy-plugin-check-snapshot -s store.json.sig < store.json` and then rejects an expired snapshot
-or a `version` lower than the last accepted one. `spec/keys/dev-snapshot.pub` is a **development
-key only**; snapshots signed with it carry `"dev": true`.
+or a `version` lower than the last accepted one. `spec/keys/allowed_signers` holds the production
+key (ADR-0039); `spec/keys/dev-snapshot.pub` is a **development key only**; snapshots signed with
+it carry `"dev": true`. Our published snapshot: `https://prometheusroot.github.io/omarchy-plugin-check-data/`
+(per file) and `https://github.com/PrometheusRoot/omarchy-plugin-check-data/releases` (one
+immutable `snapshot.tar.gz` per version).
 
 Identity fields a client binds an installed checkout with (ADR-0034):
 
